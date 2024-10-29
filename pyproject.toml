@@ -9,6 +9,9 @@ readme = "README.md"
 [tool.poetry.dependencies]
 python = ">=3.8"
 
+[tool.black]
+# Settings for the Black code formatter
+line-length = 80
 
 [build-system]
 requires = ["poetry-core"]
