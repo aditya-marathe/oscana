@@ -1,1 +1,1 @@
-# OscAna: Oscillation Analysis Package
+# Oscana: Oscillation Analysis Package
