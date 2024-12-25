@@ -1,19 +1,33 @@
 [tool.poetry]
 name = "oscana"
-version = "0.1.0"
+version = "0.2.5"
 description = "A very simple analysis package for neutrino oscillation experiments."
 authors = ["Aditya Marathe <72881014+aditya-marathe@users.noreply.github.com>"]
-license = "GNU General Public License Version 3"
+license = "GPL-3.0-only"
 readme = "README.md"
+repository = "https://github.com/aditya-marathe/oscana"
+package-mode = true
+packages  = [
+    { include = "oscana", from = "src" }
+]
+include = [
+    { path = "res", format = ["sdist", "wheel"] },
+]
 
 [tool.poetry.dependencies]
 python = ">=3.8"
 numpy = ">=1.24.4"
 matplotlib = ">=3.7.5"
 
+[tool.poetry.group.test.dependencies]
+pytest = "*"
+
 [tool.black]
 # Settings for the Black code formatter
 line-length = 80
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
 
 [build-system]
 requires = ["poetry-core"]
