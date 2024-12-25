@@ -5,6 +5,7 @@ oscana / utils.py
 __all__ = [
     "OscanaError",
     "load_env_file",
+    "apply_wsl_prefix",
 ]
 
 import platform
