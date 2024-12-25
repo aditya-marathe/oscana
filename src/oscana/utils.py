@@ -7,6 +7,9 @@ __all__ = [
     "load_env_file",
 ]
 
+import platform
+from pathlib import Path
+
 import dotenv
 
 # ============================== [ Exceptions ] ============================== #
@@ -25,3 +28,30 @@ def load_env_file() -> None:
     """
     if not dotenv.load_dotenv():
         raise OscanaError("Unsuccessful in loading .env file!")
+
+
+def apply_wsl_prefix(dir_: str) -> Path:
+    """\
+    Apply the Windows Subsystem for Linux (WSL) prefix to the directory path.
+
+    Parameters
+    ----------
+    dir_ : str
+        The directory path.
+    
+    Returns
+    -------
+    Path
+        The directory path with the WSL prefix.
+
+    Notes
+    -----
+    This was added to make it convienent to work on WSL or Windows.
+    """
+
+    # Only change the prefix if the platform is Linux.
+    if platform.system() == "Linux":
+        dir_split = dir_.split("://")
+        return Path("/mnt/" + dir_split[0][0].lower() + "/" + dir_split[1])
+
+    return Path(dir_)
