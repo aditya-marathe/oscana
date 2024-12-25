@@ -6,11 +6,11 @@ from __future__ import annotations
 
 __all__ = ["Theme", "themes"]
 
-from typing import Any, TYPE_CHECKING
+from typing import Any
 
 from pathlib import Path
 
-from pkg_resources import resource_filename
+from importlib import resources
 
 from dataclasses import dataclass
 
@@ -18,7 +18,16 @@ from matplotlib import cycler  # type: ignore -> Should be fine (hopefully).
 from matplotlib import font_manager as fm
 
 
-# ============================== [ Constants ] ============================== #
+# ============================== [ Constants  ] ============================== #
+
+# Note: A better way to do this would be using `importlib.resources.files` but
+#       I am currenly using Python 3.8 which does not seem to have this feature.
+#       The other option is to use `pkg_resources` but it is deprecated! So, for
+#       now, I am using `importlib.resources.path` and going back two
+#       directories to get the resources folder.
+
+with resources.path("oscana", "") as _path:
+    RESOURCES_PATH = Path(_path).parent.parent / "res"
 
 DEFAULT_FIG_SIZE: tuple[float, float] = (7.5, 6.5)  # in
 
@@ -100,7 +109,7 @@ def _load_font(font_name: str) -> str:
     font = "sans-serif"
 
     # Check if the custom font exists.
-    font_as_path = Path(resource_filename("oscana", "/fonts/" + font_name))
+    font_as_path = RESOURCES_PATH / "fonts" / font_name
 
     if font_as_path.exists():
         font_object = fm.FontProperties(fname=font_as_path)  # type: ignore
@@ -109,6 +118,9 @@ def _load_font(font_name: str) -> str:
         fm.fontManager.addfont(font_as_path)
 
     return font
+
+
+def _load_colour_cycle(): ...
 
 
 def _load_settings(theme_name: str) -> dict[str, Any]:
@@ -197,22 +209,40 @@ def _load_settings(theme_name: str) -> dict[str, Any]:
 
 # ================================ [ Themes ] ================================ #
 
+# Note: `_colour_cycle` is temporary and it may be replaced with a JSON file in
+#       the resources folder.
+
+_colour_cycle = {
+    "Light": [
+        "#CC0019",
+        "#016AC6",
+        "#FF8201",
+        "#016AC6",
+        "#FFB600",
+        "#016AC6",
+        "#AED000",
+        "#00939D",
+        "#00892F",
+        "#00939D",
+    ],
+    "Dark": [
+        "#FF6879",
+        "#F9E17D",
+        "#F1A7DC",
+        "#E59F6E",
+        "#C7B2DD",
+        "#92C2EA",
+        "#CDEA80",
+        "#B8DCD2",
+    ],
+}
+
 themes = {
     "slate": Theme(
         edge_colour="#FFFFFF",
         face_colour="#1E1E1E",
         text_colour="#FFFFFF",
-        colour_cycle=[
-            "#332288",
-            "#88CCEE",
-            "#44AA99",
-            "#117733",
-            "#999933",
-            "#DDCC77",
-            "#CC6677",
-            "#882255",
-            "#AA4499",
-        ],
+        colour_cycle=_colour_cycle["Dark"],
         title_size=11,
         text_font="cmuntx.ttf",
         text_size=13,
@@ -221,17 +251,7 @@ themes = {
         edge_colour="#000000",
         face_colour="#FFFFFF",
         text_colour="#000000",
-        colour_cycle=[
-            "#332288",
-            "#88CCEE",
-            "#44AA99",
-            "#117733",
-            "#999933",
-            "#DDCC77",
-            "#CC6677",
-            "#882255",
-            "#AA4499",
-        ],
+        colour_cycle=_colour_cycle["Light"],
         title_size=11,
         text_font="cmunrm.ttf",
         text_size=13,
@@ -240,17 +260,7 @@ themes = {
         edge_colour="#000000",
         face_colour="#C2C2C2",
         text_colour="#000000",
-        colour_cycle=[
-            "#332288",
-            "#88CCEE",
-            "#44AA99",
-            "#117733",
-            "#999933",
-            "#DDCC77",
-            "#CC6677",
-            "#882255",
-            "#AA4499",
-        ],
+        colour_cycle=_colour_cycle["Light"],
         title_size=10,
         text_font="cmunorm.ttf",
         text_size=13,

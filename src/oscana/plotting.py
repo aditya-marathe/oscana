@@ -35,7 +35,7 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import matplotlib.scale as scl
 
-from oscana.themes import _load_settings
+from .themes import _load_settings
 
 if TYPE_CHECKING:
     import numpy.typing as npt
@@ -418,6 +418,12 @@ modifiers = _Modifiers()
 class _Plot:
     @staticmethod
     def hist() -> ...: ...
+
+    @staticmethod
+    def hist_from_bins() -> ...: ...
+
+    @staticmethod
+    def uv_event_display() -> ...: ...
 
 
 plot = _Plot()
