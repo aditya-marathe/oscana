@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "oscana"
-version = "0.3.0"
+version = "0.4.0"
 description = "A very simple analysis package for neutrino oscillation experiments."
 authors = ["Aditya Marathe <72881014+aditya-marathe@users.noreply.github.com>"]
 license = "GPL-3.0-only"
@@ -15,10 +15,14 @@ include = [
 ]
 
 [tool.poetry.dependencies]
-python = ">=3.8"
+python = ">=3.10"
 python-dotenv = "*"
-numpy = ">=1.24.4"
-matplotlib = ">=3.7.5"
+numpy = "*"
+matplotlib = "*"
+pandas = "*"
+uproot = "*"
+torch = "*"
+torch-vision = "*"
 
 [tool.poetry.group.test.dependencies]
 pytest = "*"
