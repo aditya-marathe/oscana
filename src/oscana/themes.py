@@ -1,5 +1,12 @@
 """\
 oscana / themes.py
+
+--------------------------------------------------------------------------------
+
+Author - Aditya Marathe
+Email  - aditya.marathe.20@ucl.ac.uk
+
+--------------------------------------------------------------------------------
 """
 
 from __future__ import annotations
@@ -118,9 +125,6 @@ def _load_font(font_name: str) -> str:
         fm.fontManager.addfont(font_as_path)
 
     return font
-
-
-def _load_colour_cycle(): ...
 
 
 def _load_settings(theme_name: str) -> dict[str, Any]:

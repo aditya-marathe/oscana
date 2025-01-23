@@ -1,5 +1,12 @@
-"""
+"""\
 oscana / plot.py
+
+--------------------------------------------------------------------------------
+
+Author - Aditya Marathe
+Email  - aditya.marathe.20@ucl.ac.uk
+
+--------------------------------------------------------------------------------
 """
 
 from __future__ import annotations
@@ -145,14 +152,16 @@ def _ensure_axs_tuple(axs: npt.NDArray | list[Axes] | Axes) -> tuple[Axes, ...]:
     tuple[Axes]
         Tuple of `Axes` objects.
     """
+
+    # Note: I am going to assume that `axs` will always be one of the three
+    # expected types
+
     if isinstance(axs, np.ndarray):
-        axs_return = tuple(axs.flatten().tolist())
+        axs_return: tuple[Axes, ...] = tuple(axs.flatten().tolist())
     elif isinstance(axs, list):
-        axs_return = tuple(axs)
+        axs_return: tuple[Axes, ...] = tuple(axs)
     else:
-        # Note: I am going to assume that `axs` will always be one of the three
-        # expected types.
-        axs_return = (axs,)
+        axs_return: tuple[Axes, ...] = (axs,)
 
     return axs_return
 
