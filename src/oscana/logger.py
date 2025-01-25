@@ -29,7 +29,7 @@ from pathlib import Path
 #       directories to get the resources folder.
 
 with resources.path("oscana", "") as _path:
-    CONFIG_PATH = Path(_path) / "configs"
+    CONFIG_PATH = Path(_path).parent.parent / "res" / "configs"
 
 
 # ============================ [ Implementation ] ============================ #
