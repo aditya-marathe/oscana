@@ -23,7 +23,7 @@ import pandas as pd
 import numpy as np
 import numpy.typing as npt
 
-from ..utils import _get_dir_from_env, _convert_from_utc
+from ..utils import _get_dir_from_env, _convert_from_utc, _error
 from .metadata import FileMetadata, DetectorEnum, SimFlagEnum, FileMetadataEnum
 
 # ================================ [ Logger ] ================================ #
@@ -270,13 +270,29 @@ def _v1_naive_loader(
         # Note: I have added some `pyright` comments to suppress annoying
         #       warnings.
 
-        data_dict[key] = uproot_file[base][
-            key
-        ].arrays(  # pyright: ignore[reportAttributeAccessIssue]
-            library="np"
-        )[
-            key.split("/")[-1]
-        ]
+        try:
+            base_branch = uproot_file[base]
+        except uproot.KeyInFileError:
+            _error(
+                OSError,
+                f"Base '{base}' not found in '{file}'!",
+                logger,
+            )
+
+        try:
+            data_dict[key] = base_branch[
+                key
+            ].arrays(  # pyright: ignore[reportAttributeAccessIssue]
+                library="np"
+            )[
+                key.split("/")[-1]
+            ]
+        except uproot.KeyInFileError:
+            _error(
+                OSError,
+                f"Variable '{key}' not found in '{file}'!",
+                logger,
+            )
 
     uproot_file.close()  # pyright: ignore[reportAttributeAccessIssue]
 
