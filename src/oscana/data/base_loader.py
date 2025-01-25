@@ -7,6 +7,8 @@ Author - Aditya Marathe
 Email  - aditya.marathe.20@ucl.ac.uk
 
 --------------------------------------------------------------------------------
+
+Stuff in this module is no longer used and is saved for future reference ONLY.
 """
 
 from typing import Callable
