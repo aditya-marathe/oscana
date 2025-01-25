@@ -9,4 +9,5 @@ Email  - aditya.marathe.20@ucl.ac.uk
 --------------------------------------------------------------------------------
 """
 
-from .sntp_loader import SNTPFileLoader
+from .data_loader import FileLoader
+from .functions import SNTP_BR_NTPST, SNTP_BR_NTPBDLITE
