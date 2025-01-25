@@ -15,6 +15,7 @@ __all__ = ["Theme", "themes"]
 
 from typing import Any
 
+import logging
 from pathlib import Path
 
 from importlib import resources
@@ -24,6 +25,9 @@ from dataclasses import dataclass
 from matplotlib import cycler  # type: ignore -> Should be fine (hopefully).
 from matplotlib import font_manager as fm
 
+# =============================== [ Logging  ] =============================== #
+
+logger = logging.getLogger("Plot")
 
 # ============================== [ Constants  ] ============================== #
 
@@ -124,6 +128,13 @@ def _load_font(font_name: str) -> str:
 
         fm.fontManager.addfont(font_as_path)
 
+        logger.debug(f"Loaded '{font_name}' font to Matplotlib.")
+
+    logger.warning(
+        f"Font '{font_name}' not found. Defaulting to '{font.capitalize()}' "
+        "font."
+    )
+
     return font
 
 
@@ -141,7 +152,15 @@ def _load_settings(theme_name: str) -> dict[str, Any]:
     dict[str, Any]
         Dictionary of Matplotlib settings for the given theme.
     """
-    theme: Theme = themes.get(theme_name, themes["draft"])
+    theme = themes.get(theme_name, None)
+
+    if theme is None:
+        logger.warning(
+            f"Theme '{theme_name}' not found. Defaulting to the 'Draft' theme."
+        )
+        theme = themes["draft"]
+
+    logger.debug(f"Loaded '{theme_name}' theme settings.")
 
     return {
         # Quality

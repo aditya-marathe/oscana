@@ -33,7 +33,7 @@ from typing import Generator, Literal, TYPE_CHECKING
 
 from contextlib import contextmanager
 
-import warnings
+import logging, warnings
 
 import numpy as np
 
@@ -49,6 +49,10 @@ if TYPE_CHECKING:
 
     from matplotlib.figure import Figure
     from matplotlib.axes import Axes
+
+# ================================ [ Logger ] ================================ #
+
+logger = logging.getLogger("Plot")
 
 # ============================== [ Constants  ] ============================== #
 
@@ -125,6 +129,11 @@ def context(theme_name: str = "slate") -> Generator[None, None, None]:
     # artists found" warnings.
     warnings.simplefilter("ignore", UserWarning)
 
+    logger.debug(
+        f"Entering the plotting context with '{theme_name}' theme. Warning "
+        "messages are temporarily supressed."
+    )
+
     try:
         yield  # Here, we are inside the context...
     finally:
@@ -133,6 +142,10 @@ def context(theme_name: str = "slate") -> Generator[None, None, None]:
 
         # Unfilter warnings
         warnings.simplefilter("default", UserWarning)
+
+        logger.debug(
+            "Exiting the plotting context. Warning messages are now enabled."
+        )
 
 
 # =============================== [ Layouts  ] =============================== #
@@ -211,6 +224,8 @@ class _Layout:
             **figure_kwargs,
         )
 
+        logger.debug(f"Created a {n_rows}x{n_cols} grid layout.")
+
         return fig, _ensure_axs_tuple(axs=axs)
 
     @staticmethod
@@ -259,6 +274,12 @@ class _Layout:
             ax_resolution = fig.add_subplot(gs[:, 1])
             axs.append(ax_resolution)
 
+        logger.debug(
+            "Created a spectrum plot layout. "
+            + ("+ MC-Data ratio plot. " if show_ratio else "")
+            + ("+ Plot of energy resolution." if show_resolution else "")
+        )
+
         return fig, _ensure_axs_tuple(axs=axs)
 
 
@@ -278,6 +299,7 @@ def _fwd_transform(
     segments : List[Tuple[float, float, float]]
         The segments of the custom axis. Each segment is a tuple of the form: 
         (x_min, x_max, % of axis).
+        
     array : npt.ArrayLike
         The array to be transformed to the custom axis.
 
@@ -299,6 +321,8 @@ def _fwd_transform(
 
         offset += segment[2]
 
+    logger.debug("Applied the forward transform to compress the energy axis.")
+
     return transformed_axis
 
 
@@ -313,6 +337,7 @@ def _inv_transform(
     segments : List[Tuple[float, float, float]]
         The segments of the custom axis. Each segment is a tuple of the form: 
         (x_min, x_max, % of axis).
+        
     array : npt.ArrayLike
         The array to be transformed back to the original axis.
 
@@ -331,6 +356,10 @@ def _inv_transform(
         original_axis[idx] = segment[0] + (array[idx] - offset) / segment[2]
 
         offset += segment[2]
+
+    logger.debug(
+        "Applied the inverse transform to return the energy axis to normal."
+    )
 
     return original_axis
 
@@ -353,8 +382,10 @@ class _Modifiers:
         segments : list[tuple[float, float, float]]
             List of tuples, where each tuple contains the start, end, and step of
             the segment. Set to default configuration if `None` is given.
+            
         x_ticks : npt.ArrayLike
             Array of x-axis ticks. Set to default configuration if `None` is given.
+            
         which_axis : str
             Which axis to set the scale for. Defaults to "x".
         """
@@ -374,6 +405,8 @@ class _Modifiers:
             )
         )
         ax.set_xticks(x_ticks)
+
+        logger.debug("Modified the energy x-axis.")
 
     @staticmethod
     def spec_fig_cleanup(
@@ -418,6 +451,8 @@ class _Modifiers:
         if ax_resolution is not None:
             fig.subplots_adjust(wspace=0.05)
 
+        logger.debug("Cleaned up the spectrum plot figure.")
+
 
 modifiers = _Modifiers()
 
@@ -454,8 +489,10 @@ class _Template:
         ----------
         reco_energy : npt.ArrayLike
             Reconstructed energy using the algorithm.
+            
         mc_energy : npt.ArrayLike
             True energy.
+            
         algorithm_name : str
             Optional: Name of the algorithm used to estimate the energy.
 
@@ -463,11 +500,13 @@ class _Template:
         -------
         Figure
             Matplotlib `Figure` object.
+            
         tuple[Axes, ...]
             Tuple of Matplotlib `Axes` object(s).
+            
         dict[str, float]
             Dictionary containing the mean and standard deviation of the energy
-            resolution distribution.
+            resolution distribution in the keys 'Mean' and 'Std' respectively.
         """
         reco_energy = np.asarray(reco_energy)
         mc_energy = np.asarray(mc_energy)
@@ -529,6 +568,8 @@ class _Template:
         ax.set_ylabel("Frequency".upper())
 
         modifiers.spec_fig_cleanup(fig, *axs)
+
+        logger.debug("Using the 'Energy Estimator' template.")
 
         return fig, axs, {"Mean": mean_resolution, "StD": std_resolution}
 
