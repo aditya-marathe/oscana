@@ -17,9 +17,15 @@ __all__ = [
     "_get_dir_from_env",
 ]
 
+from typing import Any
+
 import os, platform
 import logging, logging.config
+from datetime import datetime
 from pathlib import Path
+
+import numpy as np
+import numpy.typing as npt
 
 import dotenv
 
@@ -88,6 +94,31 @@ def _apply_wsl_prefix(dir_: str) -> Path:
         return path
 
     return Path(dir_).resolve()
+
+
+def _convert_from_utc(
+    utc_timestamps: npt.NDArray[np.int_],
+) -> npt.NDArray[np.datetime64]:
+    """\
+    [ Internal ]
+
+    Convert a UTC timestamp to a datetime object.
+
+    Parameters
+    ----------
+    utc_timestamp : int
+        The UTC timestamp.
+
+    Returns
+    -------
+    datetime
+        The datetime object.
+    """
+    # This solution was thanks to ChatGPT - it actually works sometimes! :)
+    return (
+        np.datetime64("1970-01-01T00:00:00")
+        + utc_timestamps.astype("timedelta64[s]")
+    ).astype("O")
 
 
 def _get_dir_from_env(file: str) -> Path:
