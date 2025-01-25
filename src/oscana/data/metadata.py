@@ -10,7 +10,7 @@ Email  - aditya.marathe.20@ucl.ac.uk
 
 from __future__ import annotations
 
-__all__ = ["FileMetadataEnum", "FileMetadata"]
+__all__ = ["FileMetadataEnum", "DetectorEnum", "SimFlagEnum", "FileMetadata"]
 
 from typing import Literal
 
@@ -21,14 +21,42 @@ from datetime import datetime
 # ============================== [ Constants  ] ============================== #
 
 
+class DetectorEnum(Enum):
+    Near = 1
+    Far = 2
+    Unknown = -1
+
+    @classmethod
+    def _missing_(cls, value: object) -> DetectorEnum:
+        return cls(cls.Unknown)
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class SimFlagEnum(Enum):
+    Data = 0
+    DaqFakeData = 1
+    MC = 2
+    Reroot = 4
+    Unknown = 8
+
+    @classmethod
+    def _missing_(cls, value: object) -> SimFlagEnum:
+        return cls(cls.Unknown)
+
+    def __str__(self) -> str:
+        return self.name
+
+
 class FileMetadataEnum(Enum):
-    MINOS = "MINOS"
+    # Detectors
     Far = "Far"
     Near = "Near"
-    MC = "MC"
-    Data = "Data"
+    # Neutrino Source
     Beam = "Beam"
     Atmospheric = "Atmospheric"
+    # Unknown
     Unknown = "Unknown"
 
     def __str__(self) -> str:
@@ -43,12 +71,12 @@ Detector        : {3!s}
 File Type       : {4!s}
 Neutrino Source : {5!s}
 Version         : {6!s}
-Run Number      : {9!s}
+Total Entries   : {7:,}
+Run Number      : {10:,}
 Date and Time
-    Start       : {7!s}
-    End         : {8!s}
-First Loaded On : {10!s}
-
+    Start       : {8!s}
+    End         : {9!s}
+First Loaded On : {11!s}
 """
 
 
@@ -94,24 +122,18 @@ class FileMetadata:
 
     # Basic Information
     file_name: str
-    experiment: Literal[
-        FileMetadataEnum.MINOS,  # Currently only MINOS is supported.
-        FileMetadataEnum.Unknown,
-    ]
-    detector: Literal[
-        FileMetadataEnum.Near, FileMetadataEnum.Far, FileMetadataEnum.Unknown
-    ]
+    experiment: Literal["MINOS"]  # Currently only MINOS is supported.
+    detector: DetectorEnum
 
     # Contents
-    file_type: Literal[
-        FileMetadataEnum.MC, FileMetadataEnum.Data, FileMetadataEnum.Unknown
-    ]
+    file_type: SimFlagEnum
     nu_source: Literal[
         FileMetadataEnum.Beam,
         FileMetadataEnum.Atmospheric,
         FileMetadataEnum.Unknown,
     ]
     version: str
+    n_records: int
 
     # Date and Time
     start_datetime: datetime
@@ -134,6 +156,7 @@ class FileMetadata:
                 self.file_type,
                 self.nu_source,
                 self.version,
+                self.n_records,
                 self.start_datetime.strftime("%d-%m-%Y %H:%M:%S"),
                 self.end_datetime.strftime("%d-%m-%Y %H:%M:%S"),
                 self.run_number,
