@@ -2,24 +2,50 @@
     "version": 1,
     "disable_existing_loggers": false,
     "formatters": {
-        "Oscana": {
-            "format": "[ %(levelname)s ] ( %(name)s : %(asctime)s ) %(message)s",
-            "datefmt": "%d/%m/%Y %H:%M:%S"
+        "DefaultFormat": {
+            "format": "[ %(levelname)-7s - %(name)-4s ] ( %(asctime)s ) %(module)s :: %(message)s",
+            "datefmt": "%Y-%m-%d %H:%M:%S %z"
         }
     },
     "handlers": {
-        "stdout": {
+        "StdOut": {
             "class": "logging.StreamHandler",
-            "stream": "ext://sys.stdout",
-            "formatter": "Oscana"
+            "level": "WARNING",
+            "formatter": "DefaultFormat",
+            "stream": "ext://sys.stdout"
         },
-        "file": {
+        "File": {
             "class": "logging.handlers.RotatingFileHandler",
             "level": "DEBUG",
-            "filename": "oscana.log",
-            "formatter": "Oscana",
-            "maxBytes": 10000,
-            "backupCount": 5
+            "formatter": "DefaultFormat",
+            "filename": "FullLog.log",
+            "maxBytes": 1000000,
+            "backupCount": 3
+        },
+        "ErrorFile": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "level": "ERROR",
+            "formatter": "DefaultFormat",
+            "filename": "Errors.log",
+            "maxBytes": 1000000,
+            "backupCount": 0
+        }
+    },
+    "loggers": {
+        "Root": {
+            "level": "INFO",
+            "handlers": [
+                "StdOut",
+                "File",
+                "ErrorFile"
+            ]
+        },
+        "Plot": {
+            "level": "INFO",
+            "handlers": [
+                "StdOut",
+                "ErrorFile"
+            ]
         }
     }
 }
