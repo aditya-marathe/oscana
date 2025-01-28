@@ -29,7 +29,7 @@ __all__ = [
 #       Usually, I think, it is not a good idea to hide this kind of complexity
 #       and it is better to use dictionaries.
 
-from typing import Generator, Literal, TYPE_CHECKING
+from typing import Generator, Literal, Any, TYPE_CHECKING
 
 from contextlib import contextmanager
 
@@ -41,8 +41,11 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import matplotlib.scale as scl
+from matplotlib import patches
 
 from .themes import _load_settings
+from .utils import minos_numbers, PlaneView
+from .evd import get_fd_pixel_images
 
 if TYPE_CHECKING:
     import numpy.typing as npt
@@ -56,6 +59,7 @@ logger = logging.getLogger("Plot")
 
 # ============================== [ Constants  ] ============================== #
 
+# This "guessed" binning will be gone as soon as I find the actual binning...
 MINOS_GUESSED_ENERGY_BINS: list[float] = [
     0,
     1.0,
@@ -380,11 +384,12 @@ class _Modifiers:
         ax : Axes
             Matplotlib `Axes` object.
         segments : list[tuple[float, float, float]]
-            List of tuples, where each tuple contains the start, end, and step of
-            the segment. Set to default configuration if `None` is given.
+            List of tuples, where each tuple contains the start, end, and step 
+            of the segment. Set to default configuration if `None` is given.
             
         x_ticks : npt.ArrayLike
-            Array of x-axis ticks. Set to default configuration if `None` is given.
+            Array of x-axis ticks. Set to default configuration if `None` is 
+            given.
             
         which_axis : str
             Which axis to set the scale for. Defaults to "x".
@@ -466,9 +471,6 @@ class _Plot:
     @staticmethod
     def hist_from_bins() -> ...: ...
 
-    @staticmethod
-    def uv_event_display() -> ...: ...
-
 
 plot = _Plot()
 
@@ -481,6 +483,7 @@ class _Template:
         reco_energy: npt.ArrayLike,
         mc_energy: npt.ArrayLike,
         algorithm_name: str = "",
+        **figure_kwargs,
     ) -> tuple[Figure, tuple[Axes, ...], dict[str, float]]:
         """\
         Plot the resolution of an energy estimator.
@@ -511,7 +514,9 @@ class _Template:
         reco_energy = np.asarray(reco_energy)
         mc_energy = np.asarray(mc_energy)
 
-        fig, axs = layout.spec(show_ratio=True, show_resolution=True)
+        fig, axs = layout.spec(
+            show_ratio=True, show_resolution=True, **figure_kwargs
+        )
 
         ax = axs[0]
 
@@ -572,6 +577,139 @@ class _Template:
         logger.debug("Using the 'Energy Estimator' template.")
 
         return fig, axs, {"Mean": mean_resolution, "StD": std_resolution}
+
+    @staticmethod
+    def fd_event_pixel_images(
+        stp_planeview: npt.ArrayLike,
+        stp_strip: npt.ArrayLike,
+        stp_plane: npt.ArrayLike,
+        **figure_kwargs,
+    ) -> tuple[Figure, tuple[Axes, ...]]:
+        """\
+        Plot the pixel images of the event.
+
+        Parameters
+        ----------
+        stp_planeview : npt.ArrayLike
+            The planeview of the event.
+            
+        stp_strip : npt.ArrayLike
+            The strip of the event.
+
+        stp_plane : npt.ArrayLike
+            The plane of the event.
+
+        Returns
+        -------
+        Figure
+            Matplotlib `Figure` object.
+            
+        tuple[Axes, ...]
+            Tuple of Matplotlib `Axes` object(s).
+        """
+        fd_depths = np.asarray(
+            [
+                minos_numbers["FD"]["West"]["D"],
+                minos_numbers["FD"]["AirGap"]["D"],
+                minos_numbers["FD"]["East"]["D"],
+            ]
+        )
+
+        fd_depth_ratios = fd_depths / fd_depths.sum()
+
+        fd_w_n_planes = minos_numbers["FD"]["West"]["NPlanes"]
+        fd_e_n_planes = minos_numbers["FD"]["East"]["NPlanes"]
+
+        fd_n_strips = minos_numbers["FD"]["NStripsPerPlane"]
+
+        u_west_image, u_east_image = get_fd_pixel_images(
+            plane=PlaneView.U,
+            stp_planeview=stp_planeview,
+            stp_strip=stp_strip,
+            stp_plane=stp_plane,
+        )
+
+        v_west_image, v_east_image = get_fd_pixel_images(
+            plane=PlaneView.V,
+            stp_planeview=stp_planeview,
+            stp_strip=stp_strip,
+            stp_plane=stp_plane,
+        )
+
+        fig, axs = layout.grid(
+            n_rows=2,
+            n_cols=3,
+            constrained_layout=False,
+            width_ratios=fd_depth_ratios,
+            **figure_kwargs,
+        )
+
+        fig.subplots_adjust(wspace=0)
+
+        imshow_kwargs: dict[str, Any] = {"origin": "lower", "aspect": "auto"}
+        west_extent = [0, fd_w_n_planes, 0, fd_n_strips]
+        east_extent = [
+            fd_w_n_planes,
+            fd_w_n_planes + fd_e_n_planes,
+            0,
+            fd_n_strips,
+        ]
+
+        # Plotting the images...
+        axs[0].imshow(u_west_image, extent=west_extent, **imshow_kwargs)
+        axs[1].add_patch(
+            patches.Rectangle(
+                (0, 0),
+                1,
+                1,
+                linewidth=0.5,
+                edgecolor=plt.rcParams["axes.edgecolor"],
+                facecolor="none",
+                hatch="//",
+            )
+        )
+        axs[2].imshow(u_east_image, extent=east_extent, **imshow_kwargs)
+
+        axs[3].imshow(v_west_image, extent=west_extent, **imshow_kwargs)
+        axs[4].add_patch(
+            patches.Rectangle(
+                (0, 0),
+                1,
+                1,
+                linewidth=0.5,
+                edgecolor=plt.rcParams["axes.edgecolor"],
+                facecolor="none",
+                hatch="//",
+            )
+        )
+        axs[5].imshow(v_east_image, extent=east_extent, **imshow_kwargs)
+
+        x_label = "Plane Number".upper()
+        y_label = "Strip Number".upper()
+
+        axs[0].tick_params(which="both", right=False)
+        axs[0].set_ylabel(y_label)
+        axs[1].set_yticks([])
+        axs[1].set_xticks([])
+        axs[1].set_yticklabels([])
+        axs[1].set_xticklabels([])
+        axs[2].tick_params(which="both", left=False, labelleft=False)
+        axs[3].tick_params(which="both", right=False)
+        axs[3].set_ylabel(y_label)
+        axs[4].set_yticks([])
+        axs[4].set_xticks([])
+        axs[4].set_yticklabels([])
+        axs[4].set_xticklabels([])
+        # axs[4].set_xlabel(x_label)
+        axs[5].tick_params(which="both", left=False, labelleft=False)
+
+        fig.supxlabel(
+            x_label,
+            fontsize=axs[0].xaxis.label.get_fontsize(),
+            transform=axs[1].xaxis.label.get_transform(),
+        )
+
+        return fig, axs
 
 
 template = _Template()
