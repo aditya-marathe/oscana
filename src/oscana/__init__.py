@@ -73,3 +73,4 @@ def init(
         logs_dir=logs_dir, verbosity=verbosity, config_file=config_file
     )
     init_env_variables()
+    init_minos_numbers()
