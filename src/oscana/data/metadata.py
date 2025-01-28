@@ -10,57 +10,16 @@ Email  - aditya.marathe.20@ucl.ac.uk
 
 from __future__ import annotations
 
-__all__ = ["FileMetadataEnum", "DetectorEnum", "SimFlagEnum", "FileMetadata"]
+__all__ = ["FileMetadata"]
 
 from typing import Literal
 
-from enum import Enum
 from dataclasses import dataclass
 from datetime import datetime
 
+from ..utils import DetectorEnum, SimFlagEnum, FileMetadataEnum
+
 # ============================== [ Constants  ] ============================== #
-
-
-class DetectorEnum(Enum):
-    Near = 1
-    Far = 2
-    Unknown = -1
-
-    @classmethod
-    def _missing_(cls, value: object) -> DetectorEnum:
-        return cls(cls.Unknown)
-
-    def __str__(self) -> str:
-        return self.name
-
-
-class SimFlagEnum(Enum):
-    Data = 0
-    DaqFakeData = 1
-    MC = 2
-    Reroot = 4
-    Unknown = 8
-
-    @classmethod
-    def _missing_(cls, value: object) -> SimFlagEnum:
-        return cls(cls.Unknown)
-
-    def __str__(self) -> str:
-        return self.name
-
-
-class FileMetadataEnum(Enum):
-    # Detectors
-    Far = "Far"
-    Near = "Near"
-    # Neutrino Source
-    Beam = "Beam"
-    Atmospheric = "Atmospheric"
-    # Unknown
-    Unknown = "Unknown"
-
-    def __str__(self) -> str:
-        return self.name
 
 
 _sumamry_text = """\

@@ -11,7 +11,7 @@ Email  - aditya.marathe.20@ucl.ac.uk
 
 from __future__ import annotations
 
-__all__ = ["SNTP_BR_STD", "SNTP_BR_BDL", "SNTP_BR_FIT"]
+__all__ = []
 
 from typing import Any
 
@@ -23,39 +23,24 @@ import pandas as pd
 import numpy as np
 import numpy.typing as npt
 
-from ..utils import _get_dir_from_env, _convert_from_utc, _error
-from .metadata import FileMetadata, DetectorEnum, SimFlagEnum, FileMetadataEnum
+from ..utils import (
+    _convert_from_utc,
+    _error,
+    _get_dir_from_env,
+    DetectorEnum,
+    SimFlagEnum,
+    FileMetadataEnum,
+    SNTP_BR_STD,
+    SNTP_VR_DETECTOR,
+    SNTP_VR_SIM,
+    SNTP_VR_RUN,
+    SNTP_VR_EVT_UTC,
+)
+from .metadata import FileMetadata
 
 # ================================ [ Logger ] ================================ #
 
 logger = logging.getLogger("Root")
-
-# ============================== [ Constants  ] ============================== #
-
-# SNTP Branches
-SNTP_BR_STD = "NtpSt"
-SNTP_BR_BDL = "NtpBDLite"
-SNTP_BR_FIT = "NtpFitSA"
-
-# SNTP Leaf Variables
-SNTP_VR_DETECTOR = (
-    "NtpStRecord/RecRecordImp<RecCandHeader>/fHeader.RecPhysicsHeader/"
-    "fHeader.RecDataHeader/fHeader.RecHeader/fHeader.fVldContext.fDetector"
-)
-SNTP_VR_SIM = (
-    "NtpStRecord/RecRecordImp<RecCandHeader>/fHeader.RecPhysicsHeader"
-    "/fHeader.RecDataHeader/fHeader.RecHeader/fHeader.fVldContext.fSimFlag"
-)
-SNTP_VR_RUN = (
-    "NtpStRecord/RecRecordImp<RecCandHeader>/fHeader.RecPhysicsHeader"
-    "/fHeader.RecDataHeader/fHeader.fRun"
-)
-SNTP_VR_EVT_UTC = (
-    "NtpStRecord/RecRecordImp<RecCandHeader>/fHeader.RecPhysicsHeader/"
-    "fHeader.RecDataHeader/fHeader.RecHeader/"
-    "fHeader.fVldContext.fTimeStamp.fSec"
-)
-
 
 # =========================== [ Helper Functions ] =========================== #
 
