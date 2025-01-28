@@ -16,14 +16,13 @@ __all__ = ["Theme", "themes"]
 from typing import Any
 
 import logging
-from pathlib import Path
-
-from importlib import resources
 
 from dataclasses import dataclass
 
 from matplotlib import cycler  # type: ignore -> Should be fine (hopefully).
 from matplotlib import font_manager as fm
+
+from .utils import RESOURCES_PATH
 
 # =============================== [ Logging  ] =============================== #
 
@@ -31,21 +30,12 @@ logger = logging.getLogger("Plot")
 
 # ============================== [ Constants  ] ============================== #
 
-# Note: A better way to do this would be using `importlib.resources.files` but
-#       I am currenly using Python 3.8 which does not seem to have this feature.
-#       The other option is to use `pkg_resources` but it is deprecated! So, for
-#       now, I am using `importlib.resources.path` and going back two
-#       directories to get the resources folder.
-
-with resources.path("oscana", "") as _path:
-    RESOURCES_PATH = Path(_path).parent.parent / "res"
-
 DEFAULT_FIG_SIZE: tuple[float, float] = (7.5, 6.5)  # in
 
 # ========================= [ Classes & Functions  ] ========================= #
 
 
-@dataclass(frozen=True)
+@dataclass(slots=True, frozen=True)
 class Theme:
     """\
     Dataclass for plotting themes. Only for astheics!
@@ -66,17 +56,6 @@ class Theme:
         Size of the text. In pixels.
     """
 
-    # Using __slots__ to (somewhat) reduce memory usage...
-    __slots__ = [
-        "edge_colour",
-        "face_colour",
-        "text_colour",
-        "colour_cycle",
-        "title_size",
-        "text_font",
-        "text_size",
-    ]
-
     # Colours
 
     edge_colour: str
@@ -89,6 +68,10 @@ class Theme:
     title_size: int
     text_font: str
     text_size: int
+
+    # Image
+
+    cmap: str
 
     def get_cycler(self) -> cycler:
         """\
@@ -122,18 +105,18 @@ def _load_font(font_name: str) -> str:
     # Check if the custom font exists.
     font_as_path = RESOURCES_PATH / "fonts" / font_name
 
-    if font_as_path.exists():
-        font_object = fm.FontProperties(fname=font_as_path)  # type: ignore
-        font = font_object.get_name()
+    if not font_as_path.exists():
+        logger.warning(
+            f"Font '{font_name}' not found. Defaulting to '{font.capitalize()}'"
+            " font."
+        )
 
-        fm.fontManager.addfont(font_as_path)
+    font_object = fm.FontProperties(fname=font_as_path)  # type: ignore
+    font = font_object.get_name()
 
-        logger.debug(f"Loaded '{font_name}' font to Matplotlib.")
+    fm.fontManager.addfont(font_as_path)
 
-    logger.warning(
-        f"Font '{font_name}' not found. Defaulting to '{font.capitalize()}' "
-        "font."
-    )
+    logger.debug(f"Loaded '{font_name}' font to Matplotlib.")
 
     return font
 
@@ -216,7 +199,7 @@ def _load_settings(theme_name: str) -> dict[str, Any]:
         # Linestyle
         "lines.dashed_pattern": (7, 4),
         # Image
-        "image.cmap": "viridis",
+        "image.cmap": theme.cmap,
         "image.origin": "lower",
         "image.aspect": "auto",
         # Legend
@@ -269,6 +252,7 @@ themes = {
         title_size=11,
         text_font="cmuntx.ttf",
         text_size=13,
+        cmap="hot",
     ),
     "light": Theme(
         edge_colour="#000000",
@@ -276,8 +260,9 @@ themes = {
         text_colour="#000000",
         colour_cycle=_colour_cycle["Light"],
         title_size=11,
-        text_font="cmunrm.ttf",
+        text_font="cmuntx.ttf",
         text_size=13,
+        cmap="hot_r",
     ),
     "draft": Theme(
         edge_colour="#000000",
@@ -287,5 +272,6 @@ themes = {
         title_size=10,
         text_font="cmunorm.ttf",
         text_size=13,
+        cmap="hot_r",
     ),
 }
