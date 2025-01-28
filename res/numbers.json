@@ -1,0 +1,22 @@
+{
+    "FD": {
+        "TotMass": 5.4,
+        "FidMass": 3.3,
+        "West": {
+            "H": 8.0,
+            "W": 8.0,
+            "D": 15.0,
+            "NPlanes": 242
+        },
+        "East": {
+            "H": 8.0,
+            "W": 8.0,
+            "D": 15.0,
+            "NPlanes": 243
+        },
+        "NStripsPerPlane": 192,
+        "AirGap": {
+            "D": 1.0
+        }
+    }
+}
