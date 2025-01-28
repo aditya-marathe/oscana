@@ -11,6 +11,8 @@ Email  - aditya.marathe.20@ucl.ac.uk
 
 from __future__ import annotations
 
+__all__ = ["FileLoader"]
+
 from typing import Callable
 
 import logging
