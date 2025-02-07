@@ -81,7 +81,7 @@ def init_root_logger(
     #       a better way, please let me know! Thanks!
 
     def _apply_wsl_prefix(dir_: str) -> Path:
-        if platform.system() == "Linux":
+        if platform.system() == "Linux" and dir_.startswith("C:"):
             dir_split = dir_.split("://")
             return Path(
                 "/mnt/" + dir_split[0][0].lower() + "/" + dir_split[1]
