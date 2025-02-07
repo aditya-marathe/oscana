@@ -19,11 +19,16 @@ __all__ = [
     "OscanaError",
     "init_env_variables",
     "init_minos_numbers",
+    "init_variable_search",
+    "vs_search_variable",
+    "vs_print_roots",
+    "vs_print_variables",
+    "destroy_variable_search",
 ]
 
-from typing import TypeAlias, Any, Literal, Callable
+from typing import TypeAlias, Any, Literal, Callable, Final
 
-import os, platform, json
+import os, platform, json, re
 from importlib import resources, import_module
 import logging, logging.config
 from pathlib import Path
@@ -54,7 +59,11 @@ with resources.path("oscana", "") as _path:
     RESOURCES_PATH = Path(_path).parent.parent / "res"
 
 # Note: This is very loosely, a constant. Seriously, do not change this!
-minos_numbers: dict[str, Any] = {}
+minos_numbers: Final[dict[str, int | float]] = {}
+
+variable_hashtable: Final[dict[str, dict[str, list[str]]]] = {}
+
+supported_file_types: Final[tuple[str, ...]] = ("sntp_std",)
 
 # SNTP Branches
 SNTP_BR_STD = "NtpSt"
@@ -89,7 +98,7 @@ class BaseEnum(Enum):
         return f"Oscana.{self.__class__.__name__}.{self.name}"
 
 
-class PlaneView(Enum):
+class PlaneView(BaseEnum):
     # Note: I am using (mostly) the same Enum as the MINOS code (refer to
     #       `EPlaneView` on Doxygen).
 
@@ -118,12 +127,6 @@ class PlaneView(Enum):
     def _missing_(cls, value: object) -> PlaneView:
         return cls(cls.Unknown)
 
-    def __str__(self) -> str:
-        return self.name
-
-    def __repr__(self) -> str:
-        return f"Oscana.{self.__class__.__name__}.{self.name}"
-
 
 DynamicFuncPrefix: TypeAlias = Literal["hlp_", "cut_", "tfm_"]
 
@@ -151,6 +154,10 @@ def init_minos_numbers() -> None:
     """\
     Load the detector geometry and other numbers from a JSON file.
     """
+    if minos_numbers:
+        logger.info("Already loaded MINOS numbers from the JSON file.")
+        return
+
     file = (RESOURCES_PATH / "numbers.json").resolve()
 
     if not file.exists():
@@ -160,7 +167,7 @@ def init_minos_numbers() -> None:
             logger,
         )
 
-    minos_numbers.clear()  # Ensure that the dictionary is empty.
+    # minos_numbers.clear()  # Ensure that the dictionary is empty.
 
     with open(file, "r") as file:
         minos_numbers.update(json.load(file))
@@ -399,3 +406,153 @@ def import_plugins(file: str) -> dict[str, Any]:
             }
 
     return {}
+
+
+# ========================= [ Variable Search Tool ] ========================= #
+
+
+def init_variable_search() -> None:
+    """\
+    Initialise the variable search tool.
+    """
+    if variable_hashtable:
+        logger.info("Already initialised the variable search tool.")
+        return
+
+    dir_ = (RESOURCES_PATH / "variables").resolve()
+
+    if not dir_.exists():
+        _error(
+            OscanaError,
+            "Variable search tool file does not exist in Oscana's resources!",
+            logger,
+        )
+
+    for f_name in supported_file_types:
+        f_dir = dir_ / f"{f_name}.txt"
+
+        if not f_dir.exists():
+            _error(
+                FileNotFoundError,
+                f"Variable search tool file '{f_name}.txt' is not supported.",
+                logger,
+            )
+
+        with open(f_dir, "r") as f:
+            variable_hashtable[f_name] = {}
+
+            for line in f.readlines():
+                line_split = line.strip().split(".")
+                variable_root = line_split.pop(0)
+                variable_hashtable[f_name].setdefault(variable_root, [])
+
+                if len(line_split):
+                    variable_hashtable[f_name][variable_root].append(
+                        ".".join(line_split)
+                    )
+
+    logger.info("Loaded variables to the search tool.")
+
+
+def _vs_check_and_get(file_type: str) -> dict[str, list[str]]:
+    """\
+    [ Internal ]
+
+    Check if VS was initialised and if the file type is supported.
+    """
+    if not variable_hashtable:
+        _error(
+            OscanaError,
+            "Variable search tool is not initialised.",
+            logger,
+        )
+
+    file_type_variables = variable_hashtable.get(file_type, None)
+
+    if file_type_variables is None:
+        _error(
+            OscanaError,
+            f"File type '{file_type}' is not supported by the search tool.",
+            logger,
+        )
+
+    return file_type_variables
+
+
+def vs_search_variable(file_type: str, query: str) -> None:
+    """\
+    Search for a variable using regular expressions black magic.
+    """
+    file_type_variables = _vs_check_and_get(file_type=file_type)
+
+    query_compiled = re.compile(query)
+
+    # Primitive, but it works.
+
+    for key in sorted(file_type_variables.keys()):
+        for var in file_type_variables[key]:
+            if query_compiled.search(key + "." + var):
+                print(key + "." + var)
+
+
+def vs_print_roots(file_type: str) -> None:
+    """\
+    Variable Search Tool: Print the root variables for a given file type.
+
+    Parameters
+    ----------
+    file_type : str
+        The file type.
+    """
+    file_type_variables = _vs_check_and_get(file_type=file_type)
+
+    for key in sorted(file_type_variables.keys()):
+        print(key)
+
+
+def vs_print_variables(file_type: str, root: str = "*") -> None:
+    """\
+    Variable Search Tool: Print the variables for a given file type.
+
+    Parameters
+    ----------
+    file_type : str
+        The file type.
+    
+    root : str
+        The root variable. Default is '*'.
+    """
+    file_type_variables = _vs_check_and_get(file_type=file_type)
+
+    print_title = lambda x: print(x + "\n" + "-" * len(x))
+
+    if root == "*":
+        for key in sorted(file_type_variables.keys()):
+            print_title(key)
+
+            for var in file_type_variables[key]:
+                print(key + "." + var)
+
+            print()
+
+        return
+
+    if root not in file_type_variables:
+        _error(
+            OscanaError,
+            f"Root variable '{root}' is not found in the search tool.",
+            logger,
+        )
+
+    print_title(root)
+
+    for var in file_type_variables[root]:
+        print(root + "." + var)
+
+
+def destroy_variable_search() -> None:
+    """\
+    Destroy the variable search tool.
+    """
+    variable_hashtable.clear()
+    logger.info("Destroyed the variable search tool.")
