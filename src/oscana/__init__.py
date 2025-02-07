@@ -26,16 +26,12 @@ oscana.init_env_variables()
 
 from __future__ import annotations
 
-__version__ = "0.5.0"
+__version__ = "0.5.1"
 
 from .utils import *
-
 from .logger import init_root_logger
-
-from .data import *
-
-from .evd import *
-
+from . import data
+from . import evd
 
 print(f"Oscana (v{__version__}) - Neutrino Oscillation Analysis Package.")
 
@@ -68,6 +64,10 @@ def init(
 
     config_file : str, optional
         Path to the config file, by default None
+
+    Notes
+    -----
+    You can also call Oscana `init_*` functions separately.
     """
     init_root_logger(
         logs_dir=logs_dir, verbosity=verbosity, config_file=config_file
