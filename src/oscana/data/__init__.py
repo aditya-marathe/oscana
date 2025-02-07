@@ -9,6 +9,8 @@ Email  - aditya.marathe.20@ucl.ac.uk
 --------------------------------------------------------------------------------
 """
 
-from .data_loader import *
-from .functions import *
-from .metadata import *
+from .enumerations import *
+from .f_metadata import *
+from .t_metadata import *
+from .io_base import *
+from .data_handler import *
