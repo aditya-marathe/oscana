@@ -59,7 +59,7 @@ with resources.path("oscana", "") as _path:
     RESOURCES_PATH = Path(_path).parent.parent / "res"
 
 # Note: This is very loosely, a constant. Seriously, do not change this!
-minos_numbers: Final[dict[str, int | float]] = {}
+minos_numbers: Final[dict[str, Any]] = {}
 
 variable_hashtable: Final[dict[str, dict[str, list[str]]]] = {}
 
