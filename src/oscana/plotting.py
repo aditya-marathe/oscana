@@ -421,10 +421,12 @@ class _Modifiers:
         ax_resolution: Axes | None = None,
     ) -> None:
 
+        axs_edge_colour = plt.rcParams["axes.edgecolor"]
+
         if ax_ratio is not None:
             ax_ratio.axhline(
                 0,
-                color=plt.rcParams["axes.edgecolor"],
+                color=axs_edge_colour,
                 linestyle="dashed",
                 linewidth=plt.rcParams["xtick.major.width"],
             )
@@ -435,7 +437,7 @@ class _Modifiers:
         if ax_resolution is not None:
             ax_resolution.axvline(
                 0,
-                color=plt.rcParams["axes.edgecolor"],
+                color=axs_edge_colour,
                 linestyle="dashed",
                 linewidth=plt.rcParams["xtick.major.width"],
             )
@@ -561,7 +563,10 @@ class _Template:
         mean_resolution = float(np.mean(resolution))
         std_resolution = float(np.std(resolution))
 
-        ax.hist(resolution, bins=np.linspace(-1, 1, 30))
+        ax.hist(
+            resolution,
+            bins=np.linspace(-1, 1, 30),  # pyright: ignore reportArgumentType
+        )
 
         ax.set_title(
             r"$\mu=$"
@@ -607,6 +612,8 @@ class _Template:
         tuple[Axes, ...]
             Tuple of Matplotlib `Axes` object(s).
         """
+        axs_edge_colour = plt.rcParams["axes.edgecolor"]
+
         fd_depths = np.asarray(
             [
                 minos_numbers["FD"]["West"]["D"],
@@ -617,8 +624,8 @@ class _Template:
 
         fd_depth_ratios = fd_depths / fd_depths.sum()
 
-        fd_w_n_planes = minos_numbers["FD"]["West"]["NPlanes"]
-        fd_e_n_planes = minos_numbers["FD"]["East"]["NPlanes"]
+        fd_w_n_planes: int = minos_numbers["FD"]["West"]["NPlanes"]
+        fd_e_n_planes: int = minos_numbers["FD"]["East"]["NPlanes"]
 
         fd_n_strips = minos_numbers["FD"]["NStripsPerPlane"]
 
@@ -647,13 +654,18 @@ class _Template:
         fig.subplots_adjust(wspace=0)
 
         imshow_kwargs: dict[str, Any] = {"origin": "lower", "aspect": "auto"}
-        west_extent = [0, fd_w_n_planes, 0, fd_n_strips]
-        east_extent = [
+        west_extent: tuple[int, int, int, int] = (
+            0,
+            fd_w_n_planes,
+            0,
+            fd_n_strips,
+        )
+        east_extent: tuple[int, int, int, int] = (
             fd_w_n_planes,
             fd_w_n_planes + fd_e_n_planes,
             0,
             fd_n_strips,
-        ]
+        )
 
         # Plotting the images...
         axs[0].imshow(u_west_image, extent=west_extent, **imshow_kwargs)
@@ -663,7 +675,7 @@ class _Template:
                 1,
                 1,
                 linewidth=0.5,
-                edgecolor=plt.rcParams["axes.edgecolor"],
+                edgecolor=axs_edge_colour,
                 facecolor="none",
                 hatch="//",
             )
@@ -677,7 +689,7 @@ class _Template:
                 1,
                 1,
                 linewidth=0.5,
-                edgecolor=plt.rcParams["axes.edgecolor"],
+                edgecolor=axs_edge_colour,
                 facecolor="none",
                 hatch="//",
             )
