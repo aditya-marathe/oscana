@@ -38,16 +38,11 @@ from .enumerations import (
     EHornCurrent,
     EFileType,
 )
-from ..utils import (
-    OscanaError,
-    _error,
-    _convert_from_utc,
-    SNTP_BR_STD,
-    SNTP_VR_RUN,
-    SNTP_VR_EVT_UTC,
-)
+from ..utils import OscanaError, _error, _convert_from_utc
+from ..constants import SNTP_BR_STD, SNTP_VR_RUN, SNTP_VR_EVT_UTC
 
-# ================================ [ Logger ] ================================ #
+
+# =============================== [ Logging  ] =============================== #
 
 logger = logging.getLogger("Root")
 
