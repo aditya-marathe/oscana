@@ -34,6 +34,8 @@ from pathlib import Path
 import importlib.resources as resources
 from enum import Enum
 
+import numpy as np
+
 # =========================== [ Package Constants ] ========================== #
 
 
@@ -47,6 +49,10 @@ from enum import Enum
 with resources.path("oscana", "") as _path:
     RESOURCES_PATH = Path(_path).parent.parent / "res"
 
+
+# ============================== [ Data Types ] ============================== #
+
+_IMAGE_DTYPE: Final = np.float32
 
 # ============================ [ SNTP Branches  ] ============================ #
 
@@ -87,7 +93,7 @@ IMAGE_VARIABLES: Final[list[str]] = [
 # ================================ [ Enums  ] ================================ #
 
 
-class BaseEnum(Enum):
+class _BaseEnum(Enum):
     """\
     [ Internal ] Base class for all Enums in the package.
     """
@@ -99,7 +105,7 @@ class BaseEnum(Enum):
         return f"Oscana.{self.__class__.__name__}.{self.name}"
 
 
-class EIAction(BaseEnum):
+class EIAction(_BaseEnum):
     NC = 0
     CC = 1
     UNKNOWN = -1
@@ -109,7 +115,7 @@ class EIAction(BaseEnum):
         return cls(cls.UNKNOWN)
 
 
-class EIResonance(BaseEnum):
+class EIResonance(_BaseEnum):
     QES = 1001  # Quasi-Elastic Scattering
     RES = 1002  # Resonance Production
     DIS = 1003  # Deep Inelastic Scattering
@@ -117,7 +123,7 @@ class EIResonance(BaseEnum):
     IMD = 1005  # Inverse Muon Decay
 
 
-class EIdHEP(BaseEnum):
+class EIdHEP(_BaseEnum):
     PHOTON = 22
     ELECTRON = 11
     MUON = 13
@@ -149,7 +155,7 @@ class EIdHEP(BaseEnum):
         return cls(cls.UNKNOWN)
 
 
-class EPlaneView(BaseEnum):
+class EPlaneView(_BaseEnum):
     # Note: I am using (mostly) the same Enum as the MINOS code (refer to
     #       `EPlaneView` on Doxygen).
 
