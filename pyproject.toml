@@ -21,11 +21,13 @@ numpy = "*"
 matplotlib = "*"
 pandas = "*"
 uproot = "*"
-torch = "*"
-torch-vision = "*"
+scipy = "*"
 
 [tool.poetry.group.test.dependencies]
 pytest = "*"
+
+[tool.mypy]
+python_executable = ".venv/bin/python"
 
 [tool.black]
 # Settings for the Black code formatter
