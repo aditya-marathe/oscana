@@ -40,7 +40,7 @@ if TYPE_CHECKING:
     from ..data_handler import DataHandler
 
 
-# ================================ [ Logger ] ================================ #
+# =============================== [ Logging  ] =============================== #
 
 logger = logging.getLogger("Root")
 
@@ -251,21 +251,21 @@ class PandasIO(DataIOStrategy[pd.DataFrame]):
         """
         return pd.DataFrame()
 
-    def from_sntp(self, files: list[str]) -> None:
+    def _from_sntp(self, files: list[str]) -> None:
         # We do not expect any `TransformMetadata` from the SNTP files.
         data, f_meta, _ = PandasIO._sntp_loader(self._parent._variables, files)
 
         self._parent._data_table = pd.concat([self._parent._data_table, data])
         self._parent._f_metadata.extend(f_meta)
 
-    def from_udst(self, files: list[str]) -> None:
+    def _from_udst(self, files: list[str]) -> None:
         # We do not expect any `TransformMetadata` from the uDST files.
         data, f_meta, _ = self._udst_loader(self._parent._variables, files)
 
         self._parent._data_table = pd.concat([self._parent._data_table, data])
         self._parent._f_metadata.extend(f_meta)
 
-    def from_hdf5(self, files: list[str]) -> None:
+    def _from_hdf5(self, files: list[str]) -> None:
         data, f_meta, _ = self._hdf5_loader(self._parent._variables, files)
 
         self._parent._data_table = pd.concat([self._parent._data_table, data])
