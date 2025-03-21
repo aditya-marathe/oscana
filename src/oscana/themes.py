@@ -7,6 +7,10 @@ Author - Aditya Marathe
 Email  - aditya.marathe.20@ucl.ac.uk
 
 --------------------------------------------------------------------------------
+
+This module contains all theme-related tools for the plotting module. The
+`_load_font` returns a dictionary of Matplotlib settings for the given theme,
+and contains some default setting for Matplotlib `Figure`'s and `Axes`'s.
 """
 
 from __future__ import annotations
@@ -19,9 +23,8 @@ import logging
 
 from dataclasses import dataclass
 
-from matplotlib import cycler  # type: ignore -> Should be fine (hopefully).
+from matplotlib import cycler  # pyright: ignore reportAttributeAccessIssue
 from matplotlib import font_manager as fm
-
 from .utils import RESOURCES_PATH
 
 # =============================== [ Logging  ] =============================== #
@@ -32,7 +35,7 @@ logger = logging.getLogger("Plot")
 
 DEFAULT_FIG_SIZE: tuple[float, float] = (7.5, 6.5)  # in
 
-# ========================= [ Classes & Functions  ] ========================= #
+# =========================== [ Theme Dataclass  ] =========================== #
 
 
 @dataclass(slots=True, frozen=True)
@@ -44,14 +47,19 @@ class Theme:
     ----------
     edge_colour : str
         Colour of plot borders (edges) and ticks.
+    
     face_colour : str
         Colour of the plot background ("face").
+    
     text_colour : str
         Colour of the text.
+    
     colour_cycle : list[str]
         List of colours used to create the plot colour cycle.
+    
     title_size : int
         Size of the plot title. In pixels.
+    
     text_size : int
         Size of the text. In pixels.
     """
@@ -83,6 +91,9 @@ class Theme:
             The `cycler` object.
         """
         return cycler(c=self.colour_cycle)
+
+
+# =========================== [ Helper Functions ] =========================== #
 
 
 def _load_font(font_name: str) -> str:
