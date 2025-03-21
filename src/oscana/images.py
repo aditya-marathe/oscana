@@ -39,7 +39,13 @@ def _get_strip_plane_indices(
     stp_planeview: npt.NDArray,
     stp_strip: npt.NDArray,
     stp_plane: npt.NDArray,
-) -> tuple[npt.NDArray, npt.NDArray, npt.NDArray, npt.NDArray]:
+    stp_ph0_pe: npt.NDArray | None,
+    stp_ph1_pe: npt.NDArray | None,
+) -> tuple[
+    tuple[npt.NDArray, npt.NDArray],
+    tuple[npt.NDArray, npt.NDArray],
+    tuple[npt.NDArray, npt.NDArray],
+]:
     """\
     [ Internal ] Get the strip and plane indices for the given plane view.
 
@@ -57,10 +63,21 @@ def _get_strip_plane_indices(
     stp_plane : npt.NDArray
         The `stp.plane` variable from the SNTP_BR_STD branch of SNTP files.
 
+    stp_ph0_pe : npt.NDArray | None
+        The `stp.ph0.pe` variable from the SNTP_BR_STD branch of SNTP files.
+    
+    stp_ph1_pe : npt.NDArray | None
+        The `stp.ph1.pe` variable from the SNTP_BR_STD branch of SNTP files.
+
     Returns
     -------
-    tuple[npt.NDArray, npt.NDArray, npt.NDArray, npt.NDArray]
-        The strip and plane indices for the west and east FD modules.
+    tuple[
+        tuple[npt.NDArray, npt.NDArray],
+        tuple[npt.NDArray, npt.NDArray],
+        tuple[npt.NDArray, npt.NDArray],
+    ]
+        The strip and plane indices for the west and east modules. The PE values
+        for the west and east modules.
     """
     stp_planeview = np.asarray(stp_planeview)
     stp_strip = np.asarray(stp_strip)
@@ -86,61 +103,26 @@ def _get_strip_plane_indices(
     #       West the plane number ranges from 0 to 241 and for East it ranges
     #       from 242 to 484.
 
-    strip_west = stp_strip[stp_plane <= fd_w_n_planes - 1]
-    plane_west = stp_plane[stp_plane <= fd_w_n_planes - 1]
+    west_selection = stp_plane <= (fd_w_n_planes - 1)
+    east_selection = stp_plane > (fd_w_n_planes - 1)
 
-    strip_east = stp_strip[stp_plane > fd_w_n_planes - 1]
-    plane_east = stp_plane[stp_plane > fd_w_n_planes - 1] - fd_w_n_planes
+    strip_west = stp_strip[west_selection]
+    plane_west = stp_plane[west_selection]
 
-    return strip_west, plane_west, strip_east, plane_east
+    strip_east = stp_strip[east_selection]
+    plane_east = stp_plane[east_selection] - fd_w_n_planes
 
-
-def _get_n_photoelectrons(
-    plane: EPlaneView,
-    stp_planeview: npt.NDArray,
-    stp_plane: npt.NDArray,
-    stp_ph0_pe: npt.NDArray,
-    stp_ph1_pe: npt.NDArray,
-) -> tuple[npt.NDArray, npt.NDArray]:
-    """\
-    [ Internal ] Get the number of photoelectrons for the given plane view.
-
-    Parameters
-    ----------
-    plane : EPlaneView
-        The plane view to extract the images for (either U-Z or V-Z).
-
-    stp_planeview : npt.NDArray
-        The `stp.planeview` variable from the SNTP_BR_STD branch of SNTP files.
-
-    stp_plane : npt.NDArray
-        The `stp.plane` variable from the SNTP_BR_STD branch of SNTP files.
-
-    stp_ph0_pe : npt.NDArray
-        The `stp.ph0.pe` variable from the SNTP_BR_STD branch of SNTP files.
-
-    stp_ph1_pe : npt.NDArray
-        The `stp.ph1.pe` variable from the SNTP_BR_STD branch of SNTP files.
-
-    Returns
-    -------
-    tuple[npt.NDArray, npt.NDArray]
-        The number of photoelectrons for the west and east FD modules.
-    """
-    fd_w_n_planes = minos_numbers["FD"]["West"]["NPlanes"]
-
-    try:
-        plane_selection = stp_planeview == plane.value
-    except ValueError:
-        _error(
-            ValueError,
-            "The `stp_planeview` array should be a 1D array.",
-            _logger,
-        )
+    if (stp_ph0_pe is not None) and (stp_ph1_pe is not None):
+        stp_ph1_pe = stp_ph1_pe[plane_selection][west_selection]
+        stp_ph0_pe = stp_ph0_pe[plane_selection][east_selection]
+    else:
+        stp_ph1_pe = np.ones_like(strip_west, dtype=_IMAGE_DTYPE)
+        stp_ph0_pe = np.ones_like(strip_east, dtype=_IMAGE_DTYPE)
 
     return (
-        stp_ph1_pe[plane_selection & (stp_plane <= fd_w_n_planes - 1)],
-        stp_ph0_pe[plane_selection & (stp_plane > fd_w_n_planes - 1)],
+        (strip_west, plane_west),
+        (strip_east, plane_east),
+        (stp_ph1_pe, stp_ph0_pe),
     )
 
 
@@ -189,11 +171,13 @@ def get_fd_event_images(
     fd_e_n_planes = minos_numbers["FD"]["East"]["NPlanes"]
     fd_n_strips = minos_numbers["FD"]["NStripsPerPlane"]
 
-    strip_west, plane_west, strip_east, plane_east = _get_strip_plane_indices(
+    west_indices, east_indices, digit_values = _get_strip_plane_indices(
         plane=plane,
         stp_planeview=stp_planeview,
         stp_strip=stp_strip,
         stp_plane=stp_plane,
+        stp_ph0_pe=stp_ph0_pe,
+        stp_ph1_pe=stp_ph1_pe,
     )
 
     # Fill the matrices
@@ -204,19 +188,8 @@ def get_fd_event_images(
         shape=(fd_n_strips, fd_e_n_planes), dtype=_IMAGE_DTYPE
     )
 
-    if (stp_ph0_pe is not None) and (stp_ph1_pe is not None):
-        digit_value_west, digit_value_east = _get_n_photoelectrons(
-            plane=plane,
-            stp_planeview=stp_planeview,
-            stp_plane=stp_plane,
-            stp_ph0_pe=stp_ph0_pe,
-            stp_ph1_pe=stp_ph1_pe,
-        )
-    else:
-        digit_value_west = digit_value_east = 1.0
-
-    image_west[strip_west, plane_west] = digit_value_west
-    image_east[strip_east, plane_east] = digit_value_east
+    image_west[west_indices] = digit_values[0]
+    image_east[east_indices] = digit_values[1]
 
     return image_west, image_east
 
