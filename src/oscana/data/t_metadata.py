@@ -6,6 +6,11 @@ Author - Aditya Marathe
 Email  - aditya.marathe.20@ucl.ac.uk
 
 --------------------------------------------------------------------------------
+
+This module contains the `TransformMetadata` class, which is used to keep track
+of the cuts and transforms applied to the loaded data. This is useful when we
+want to merge two datasets, and we want to ensure that the same cuts and
+transforms have been applied to both datasets.
 """
 
 from __future__ import annotations
@@ -21,9 +26,9 @@ from dataclasses import dataclass, field
 
 from ..utils import _error
 
-# ================================ [ Logger ] ================================ #
+# =============================== [ Logging  ] =============================== #
 
-logger = logging.getLogger("Root")
+_logger = logging.getLogger("Root")
 
 # ============================ [ File Metadata  ] ============================ #
 
@@ -73,7 +78,7 @@ class TransformMetadata:
                     f"Transform name '{name}' does not adhere to Oscana naming "
                     "convention."
                 ),
-                logger,
+                _logger,
             )
 
     def print(self) -> None:
@@ -102,10 +107,16 @@ class TransformMetadata:
                     f"{self.__class__.__name__} can only be compared with "
                     "another instance of the same class."
                 ),
-                logger,
+                _logger,
             )
 
-        return False  ### ---------------------------------------------------------------> DO THIS
+        # Check if the same cuts and transforms have been applied.
+        if (set(self.cuts) != set(value.cuts)) and (
+            set(self.transforms) != set(value.transforms)
+        ):
+            return False
+
+        return True
 
     def __ne__(self, value: object) -> bool:
         return not self.__eq__(value)
