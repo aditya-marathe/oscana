@@ -263,7 +263,7 @@ themes = {
         title_size=11,
         text_font="cmuntx.ttf",
         text_size=13,
-        cmap="hot",
+        cmap="viridis",
     ),
     "light": Theme(
         edge_colour="#000000",
@@ -273,7 +273,7 @@ themes = {
         title_size=11,
         text_font="cmuntx.ttf",
         text_size=13,
-        cmap="hot_r",
+        cmap="viridis",  # "hot_r",
     ),
     "draft": Theme(
         edge_colour="#000000",
@@ -283,6 +283,6 @@ themes = {
         title_size=10,
         text_font="cmunorm.ttf",
         text_size=13,
-        cmap="hot_r",
+        cmap="viridis",
     ),
 }
