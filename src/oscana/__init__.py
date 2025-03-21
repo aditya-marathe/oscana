@@ -18,9 +18,8 @@ Simply import the package and it is mandatory to then initialise the logger.
 ```python
 import oscana
 
-# Initialise Oscana
-oscana.init_root_logger()  # --> Do this first!
-oscana.init_env_variables()
+# Initialise Oscana (Do this first!)
+oscana.init()
 ```
 """
 
@@ -28,10 +27,15 @@ from __future__ import annotations
 
 __version__ = "0.5.1"
 
+from .constants import *
+from .errors import *
+from .images import *
+from .logger import *
+from .plotting import *
+from .themes import *
 from .utils import *
-from .logger import init_root_logger
+
 from . import data
-from . import evd
 
 print(f"Oscana (v{__version__}) - Neutrino Oscillation Analysis Package.")
 
