@@ -25,7 +25,7 @@ from dataclasses import dataclass
 
 from matplotlib import cycler  # pyright: ignore reportAttributeAccessIssue
 from matplotlib import font_manager as fm
-from .utils import RESOURCES_PATH
+from .constants import RESOURCES_PATH
 
 # =============================== [ Logging  ] =============================== #
 
