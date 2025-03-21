@@ -21,7 +21,7 @@ from .t_metadata import TransformMetadata
 from .f_metadata import FileMetadata
 from ..utils import import_plugins, OscanaError, _error
 
-# ================================ [ Logger ] ================================ #
+# =============================== [ Logging  ] =============================== #
 
 logger = logging.getLogger("Root")
 
@@ -119,6 +119,10 @@ class DataHandler:
 
         if not plugins:
             print("\t[ No plugins ]")
+
+    @property
+    def data(self) -> Any:
+        return self._data_table
 
     @property
     def io(self) -> DataIOStrategy:
