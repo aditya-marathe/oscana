@@ -431,6 +431,9 @@ def fd_uv_view_layout(
         )
     )
 
+    axs[0].text(12, 170, "U-Z Plane".upper())
+    axs[3].text(12, 170, "V-Z Plane".upper())
+
     x_label = "Plane Number".upper()
     y_label = "Strip Number".upper()
 
@@ -690,6 +693,7 @@ def plot_fd_event_images(
     stp_plane: npt.NDArray,
     stp_ph0_pe: npt.NDArray | None = None,
     stp_ph1_pe: npt.NDArray | None = None,
+    has_log_scale: bool = False,
     **figure_kwargs,
 ) -> tuple[Figure, tuple[Axes, ...]]:
     """\
@@ -709,19 +713,27 @@ def plot_fd_event_images(
     stp_plane : npt.NDArray
         The `stp.plane` variable from the SNTP_BR_STD branch of SNTP files.
 
+    stp_ph0_pe : npt.NDArray
+        The `stp.ph0.pe` variable from the SNTP_BR_STD branch of SNTP files.
+
+    stp_ph1_pe : npt.NDArray
+        The `stp.ph1.pe` variable from the SNTP_BR_STD branch of SNTP files.
+
+    has_log_scale : bool
+        Whether to use a log scale for the pixel images. Defaults to `False`.
+
     Returns
     -------
-    Figure
-        Matplotlib `Figure` object.
-        
-    tuple[Axes, ...]
-        Tuple of Matplotlib `Axes` object(s).
+    tuple[Figure, tuple[Axes, ...]]
+        Matplotlib `Figure` object and a tuple of Matplotlib `Axes` object(s).
     """
     fig, axs = fd_uv_view_layout(**figure_kwargs)
 
     fd_w_n_planes: int = minos_numbers["FD"]["West"]["NPlanes"]
     fd_e_n_planes: int = minos_numbers["FD"]["East"]["NPlanes"]
     fd_n_strips = minos_numbers["FD"]["NStripsPerPlane"]
+
+    has_given_pe = (stp_ph0_pe is not None) and (stp_ph1_pe is not None)
 
     # Getting the pixel images...
     u_west_image, u_east_image = get_fd_event_images(
@@ -742,7 +754,46 @@ def plot_fd_event_images(
         stp_ph1_pe=stp_ph1_pe,
     )
 
-    imshow_kwargs: dict[str, Any] = {"origin": "lower", "aspect": "auto"}
+    if has_log_scale:
+        u_west_image = np.log1p(u_west_image)
+        u_east_image = np.log1p(u_east_image)
+        v_west_image = np.log1p(v_west_image)
+        v_east_image = np.log1p(v_east_image)
+
+    imshow_kwargs: dict[str, Any] = {
+        "origin": "lower",
+        "aspect": "auto",
+        "vmin": (
+            np.min(
+                [
+                    np.min(im)
+                    for im in [
+                        u_west_image,
+                        u_east_image,
+                        v_west_image,
+                        v_east_image,
+                    ]
+                ]
+            )
+            if has_given_pe
+            else None
+        ),
+        "vmax": (
+            np.max(
+                [
+                    np.max(im)
+                    for im in [
+                        u_west_image,
+                        u_east_image,
+                        v_west_image,
+                        v_east_image,
+                    ]
+                ]
+            )
+            if has_given_pe
+            else None
+        ),
+    }
     west_extent: tuple[int, int, int, int] = (
         0,
         fd_w_n_planes,
@@ -757,11 +808,20 @@ def plot_fd_event_images(
     )
 
     # Plotting the images...
-    axs[0].imshow(u_west_image, extent=west_extent, **imshow_kwargs)
+    image = axs[0].imshow(u_west_image, extent=west_extent, **imshow_kwargs)
     axs[2].imshow(u_east_image, extent=east_extent, **imshow_kwargs)
 
     axs[3].imshow(v_west_image, extent=west_extent, **imshow_kwargs)
     axs[5].imshow(v_east_image, extent=east_extent, **imshow_kwargs)
+
+    # Adding a colourbar...
+    if has_given_pe:
+        colour_bar = fig.colorbar(image, ax=axs, pad=0.02, aspect=30)
+        colour_bar.set_label(
+            "Log(" * has_log_scale
+            + "Photoelectrons".upper()
+            + ")" * has_log_scale
+        )
 
     return fig, axs
 
