@@ -7,42 +7,61 @@ Author - Aditya Marathe
 Email  - aditya.marathe.20@ucl.ac.uk
 
 --------------------------------------------------------------------------------
+
+This module contains functions to extract the event images from the SNTP files.
 """
 
 from __future__ import annotations
 
-__all__ = ["IMAGE_VARIABLES", "get_fd_event_images"]
+__all__ = [
+    "get_fd_event_images",
+    "get_sparase_fd_event_images",
+]
 
 import logging
 
 import numpy as np
 import numpy.typing as npt
+import scipy.sparse as sps
 
-from .utils import SNTP_BR_STD, EPlaneView, minos_numbers, _error
+from .utils import minos_numbers, _error
+from .constants import _IMAGE_DTYPE, EPlaneView
 
 # ================================ [ Logger ] ================================ #
 
-logger = logging.getLogger("Root")
-
-# ========================== [ Constants / Enums  ] ========================== #
-
-IMAGE_VARIABLES = [
-    f"{SNTP_BR_STD}/stp.planeview",
-    f"{SNTP_BR_STD}/stp.strip",
-    f"{SNTP_BR_STD}/stp.plane",
-    f"{SNTP_BR_STD}/stp.ph0.pe",
-    f"{SNTP_BR_STD}/stp.ph1.pe",
-]
+_logger = logging.getLogger("Root")
 
 # =========================== [ Helper Functions ] =========================== #
 
 
 def _get_strip_plane_indices(
     plane: EPlaneView,
-    stp_planeview: npt.ArrayLike,
-    stp_strip: npt.ArrayLike,
-    stp_plane: npt.ArrayLike,
+    stp_planeview: npt.NDArray,
+    stp_strip: npt.NDArray,
+    stp_plane: npt.NDArray,
 ) -> tuple[npt.NDArray, npt.NDArray, npt.NDArray, npt.NDArray]:
+    """\
+    [ Internal ] Get the strip and plane indices for the given plane view.
+
+    Parameters
+    ----------
+    plane : EPlaneView
+        The plane view to extract the images for (either U-Z or V-Z).
+
+    stp_planeview : npt.NDArray
+        The `stp.planeview` variable from the SNTP_BR_STD branch of SNTP files.
+
+    stp_strip : npt.NDArray
+        The `stp.strip` variable from the SNTP_BR_STD branch of SNTP files.
+
+    stp_plane : npt.NDArray
+        The `stp.plane` variable from the SNTP_BR_STD branch of SNTP files.
+
+    Returns
+    -------
+    tuple[npt.NDArray, npt.NDArray, npt.NDArray, npt.NDArray]
+        The strip and plane indices for the west and east FD modules.
+    """
     stp_planeview = np.asarray(stp_planeview)
     stp_strip = np.asarray(stp_strip)
     stp_plane = np.asarray(stp_plane)
@@ -53,11 +72,11 @@ def _get_strip_plane_indices(
         _error(
             ValueError,
             "The `stp_planeview` array should be a 1D array.",
-            logger,
+            _logger,
         )
 
     stp_strip = stp_strip[plane_selection]
-    stp_plane = stp_plane[plane_selection] - 1
+    stp_plane = stp_plane[plane_selection] - np.int64(1)
 
     fd_w_n_planes = minos_numbers["FD"]["West"]["NPlanes"]
 
@@ -76,31 +95,82 @@ def _get_strip_plane_indices(
     return strip_west, plane_west, strip_east, plane_east
 
 
+def _get_n_photoelectrons(
+    plane: EPlaneView,
+    stp_planeview: npt.NDArray,
+    stp_ph0_pe: npt.NDArray,
+    stp_ph1_pe: npt.NDArray,
+) -> tuple[npt.NDArray, npt.NDArray]:
+    """\
+    [ Internal ] Get the number of photoelectrons for the given plane view.
+
+    Parameters
+    ----------
+    plane : EPlaneView
+        The plane view to extract the images for (either U-Z or V-Z).
+
+    stp_planeview : npt.NDArray
+        The `stp.planeview` variable from the SNTP_BR_STD branch of SNTP files.
+
+    stp_ph0_pe : npt.NDArray
+        The `stp.ph0.pe` variable from the SNTP_BR_STD branch of SNTP files.
+
+    stp_ph1_pe : npt.NDArray
+        The `stp.ph1.pe` variable from the SNTP_BR_STD branch of SNTP files.
+
+    Returns
+    -------
+    tuple[npt.NDArray, npt.NDArray]
+        The number of photoelectrons for the west and east FD modules.
+    """
+    try:
+        plane_selection = stp_planeview == plane.value
+    except ValueError:
+        _error(
+            ValueError,
+            "The `stp_planeview` array should be a 1D array.",
+            _logger,
+        )
+
+    #      West PE                    , East PE
+    return stp_ph1_pe[plane_selection], stp_ph0_pe[plane_selection]
+
+
 # ============================== [ Functions  ] ============================== #
 
 
 def get_fd_event_images(
     plane: EPlaneView,
-    stp_planeview: npt.ArrayLike,
-    stp_strip: npt.ArrayLike,
-    stp_plane: npt.ArrayLike,
-) -> tuple[npt.NDArray, npt.NDArray]:
+    stp_planeview: npt.NDArray,
+    stp_strip: npt.NDArray,
+    stp_plane: npt.NDArray,
+    stp_ph0_pe: npt.NDArray | None = None,
+    stp_ph1_pe: npt.NDArray | None = None,
+) -> tuple[npt.NDArray[_IMAGE_DTYPE], npt.NDArray[_IMAGE_DTYPE]]:
     """\
     Get the west and east FD event images for the given plane.
 
     Parameters
     ----------
     plane : EPlaneView
-        The plane view to extract the images for.
+        The plane view to extract the images for (either U-Z or V-Z).
 
-    stp_planeview : npt.ArrayLike
-        The `stp.planeview` variable from the SNTP_BR_STD branch.
+    stp_planeview : npt.NDArray
+        The `stp.planeview` variable from the SNTP_BR_STD branch of SNTP files.
 
-    stp_strip : npt.ArrayLike
-        The `stp.strip` variable from the SNTP_BR_STD branch.
+    stp_strip : npt.NDArray
+        The `stp.strip` variable from the SNTP_BR_STD branch of SNTP files.
 
-    stp_plane : npt.ArrayLike
-        The `stp.plane` variable from the SNTP_BR_STD branch.
+    stp_plane : npt.NDArray
+        The `stp.plane` variable from the SNTP_BR_STD branch of SNTP files.
+
+    stp_ph0_pe : npt.NDArray | None
+        The `stp.ph0.pe` variable from the SNTP_BR_STD branch of SNTP files.
+        Defaults to `None`.
+
+    stp_ph1_pe : npt.NDArray | None
+        The `stp.ph1.pe` variable from the SNTP_BR_STD branch of SNTP files.
+        Defaults to `None`.
 
     Returns
     -------
@@ -112,17 +182,77 @@ def get_fd_event_images(
     fd_n_strips = minos_numbers["FD"]["NStripsPerPlane"]
 
     strip_west, plane_west, strip_east, plane_east = _get_strip_plane_indices(
-        plane, stp_planeview, stp_strip, stp_plane
+        plane=plane,
+        stp_planeview=stp_planeview,
+        stp_strip=stp_strip,
+        stp_plane=stp_plane,
     )
 
     # Fill the matrices
     image_west = np.zeros(shape=(fd_n_strips, fd_w_n_planes))
     image_east = np.zeros(shape=(fd_n_strips, fd_e_n_planes))
 
-    image_west[strip_west, plane_west] = 1.0
-    image_east[strip_east, plane_east] = 1.0
+    if stp_ph0_pe and stp_ph1_pe:
+        digit_value_west, digit_value_east = _get_n_photoelectrons(
+            plane=plane,
+            stp_planeview=stp_planeview,
+            stp_ph0_pe=stp_ph0_pe,
+            stp_ph1_pe=stp_ph1_pe,
+        )
+    else:
+        digit_value_west = digit_value_east = 1.0
 
-    return image_west, image_east
+    image_west[strip_west, plane_west] = digit_value_west
+    image_east[strip_east, plane_east] = digit_value_east
+
+    return image_west.astype(_IMAGE_DTYPE), image_east.astype(_IMAGE_DTYPE)
 
 
-def get_sparase_fd_event
+def get_sparase_fd_event_images(
+    plane: EPlaneView,
+    stp_planeview: npt.NDArray,
+    stp_strip: npt.NDArray,
+    stp_plane: npt.NDArray,
+    stp_ph0_pe: npt.NDArray | None = None,
+    stp_ph1_pe: npt.NDArray | None = None,
+) -> tuple[sps.csr_matrix, sps.csr_matrix]:
+    """\
+    Get the west and east FD event sparse images for the given plane.
+
+    Parameters
+    ----------
+    plane : EPlaneView
+        The plane view to extract the images for (either U-Z or V-Z).
+    
+    stp_planeview : npt.NDArray
+        The `stp.planeview` variable from the SNTP_BR_STD branch of SNTP files.
+
+    stp_strip : npt.NDArray
+        The `stp.strip` variable from the SNTP_BR_STD branch of SNTP files.
+
+    stp_plane : npt.NDArray
+        The `stp.plane` variable from the SNTP_BR_STD branch of SNTP files.
+
+    stp_ph0_pe : npt.NDArray | None
+        The `stp.ph0.pe` variable from the SNTP_BR_STD branch of SNTP files.
+        Defaults to `None`.
+
+    stp_ph1_pe : npt.NDArray | None
+        The `stp.ph1.pe` variable from the SNTP_BR_STD branch of SNTP files.
+        Defaults to `None`.
+
+    Returns
+    -------
+    tuple[sps.csr_matrix, sps.csr_matrix]
+        The west and east FD event sparse event images.
+    """
+    image_west, image_east = get_fd_event_images(
+        plane=plane,
+        stp_planeview=stp_planeview,
+        stp_strip=stp_strip,
+        stp_plane=stp_plane,
+        stp_ph0_pe=stp_ph0_pe,
+        stp_ph1_pe=stp_ph1_pe,
+    )
+
+    return sps.csr_matrix(image_west), sps.csr_matrix(image_east)
