@@ -183,9 +183,9 @@ def _axs_fwd_transform(
 
     for segment in segments:
         idx = (array > segment[0]) & (array <= segment[1])
-        transformed_axis[idx] = offset + (array[idx] - segment[0]) * (
-            segment[2] / (segment[1] - segment[0])
-        )
+        transformed_axis[idx] = offset + (
+            array[idx] - np.float64(segment[0])
+        ) * (segment[2] / (segment[1] - segment[0]))
 
         offset += segment[2]
 
