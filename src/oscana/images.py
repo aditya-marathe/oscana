@@ -98,6 +98,7 @@ def _get_strip_plane_indices(
 def _get_n_photoelectrons(
     plane: EPlaneView,
     stp_planeview: npt.NDArray,
+    stp_plane: npt.NDArray,
     stp_ph0_pe: npt.NDArray,
     stp_ph1_pe: npt.NDArray,
 ) -> tuple[npt.NDArray, npt.NDArray]:
@@ -112,6 +113,9 @@ def _get_n_photoelectrons(
     stp_planeview : npt.NDArray
         The `stp.planeview` variable from the SNTP_BR_STD branch of SNTP files.
 
+    stp_plane : npt.NDArray
+        The `stp.plane` variable from the SNTP_BR_STD branch of SNTP files.
+
     stp_ph0_pe : npt.NDArray
         The `stp.ph0.pe` variable from the SNTP_BR_STD branch of SNTP files.
 
@@ -123,6 +127,8 @@ def _get_n_photoelectrons(
     tuple[npt.NDArray, npt.NDArray]
         The number of photoelectrons for the west and east FD modules.
     """
+    fd_w_n_planes = minos_numbers["FD"]["West"]["NPlanes"]
+
     try:
         plane_selection = stp_planeview == plane.value
     except ValueError:
@@ -132,8 +138,10 @@ def _get_n_photoelectrons(
             _logger,
         )
 
-    #      West PE                    , East PE
-    return stp_ph1_pe[plane_selection], stp_ph0_pe[plane_selection]
+    return (
+        stp_ph1_pe[plane_selection & (stp_plane <= fd_w_n_planes - 1)],
+        stp_ph0_pe[plane_selection & (stp_plane > fd_w_n_planes - 1)],
+    )
 
 
 # ============================== [ Functions  ] ============================== #
@@ -189,13 +197,18 @@ def get_fd_event_images(
     )
 
     # Fill the matrices
-    image_west = np.zeros(shape=(fd_n_strips, fd_w_n_planes))
-    image_east = np.zeros(shape=(fd_n_strips, fd_e_n_planes))
+    image_west = np.zeros(
+        shape=(fd_n_strips, fd_w_n_planes), dtype=_IMAGE_DTYPE
+    )
+    image_east = np.zeros(
+        shape=(fd_n_strips, fd_e_n_planes), dtype=_IMAGE_DTYPE
+    )
 
-    if stp_ph0_pe and stp_ph1_pe:
+    if (stp_ph0_pe is not None) and (stp_ph1_pe is not None):
         digit_value_west, digit_value_east = _get_n_photoelectrons(
             plane=plane,
             stp_planeview=stp_planeview,
+            stp_plane=stp_plane,
             stp_ph0_pe=stp_ph0_pe,
             stp_ph1_pe=stp_ph1_pe,
         )
@@ -205,7 +218,7 @@ def get_fd_event_images(
     image_west[strip_west, plane_west] = digit_value_west
     image_east[strip_east, plane_east] = digit_value_east
 
-    return image_west.astype(_IMAGE_DTYPE), image_east.astype(_IMAGE_DTYPE)
+    return image_west, image_east
 
 
 def get_sparase_fd_event_images(
