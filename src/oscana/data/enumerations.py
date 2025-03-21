@@ -14,10 +14,10 @@ __all__ = []
 
 from enum import auto
 
-from ..utils import BaseEnum
+from ..constants import _BaseEnum
 
 
-class EFileFormat(BaseEnum):
+class EFileFormat(_BaseEnum):
     """\
     [ Internal ]
 
@@ -37,7 +37,7 @@ class EFileFormat(BaseEnum):
         return cls.UNKNOWN
 
 
-class EFileType(BaseEnum):
+class EFileType(_BaseEnum):
     """\
     [ Internal ]
 
@@ -57,7 +57,7 @@ class EFileType(BaseEnum):
         return cls.UNKNOWN
 
 
-class ESimFlag(BaseEnum):
+class ESimFlag(_BaseEnum):
     """\
     [ Internal ]
 
@@ -81,7 +81,7 @@ class ESimFlag(BaseEnum):
         return cls.UNKNOWN
 
 
-class EExperiment(BaseEnum):
+class EExperiment(_BaseEnum):
     """\
     [ Internal ]
 
@@ -103,7 +103,7 @@ class EExperiment(BaseEnum):
         return cls.UNKNOWN
 
 
-class EDetector(BaseEnum):
+class EDetector(_BaseEnum):
     """\
     [ Internal ]
 
@@ -125,7 +125,7 @@ class EDetector(BaseEnum):
         return cls.UNKNOWN
 
 
-class EMCVersion(BaseEnum):
+class EMCVersion(_BaseEnum):
     """\
     [ Internal ]
 
@@ -149,7 +149,7 @@ class EMCVersion(BaseEnum):
         return cls.UNKNOWN
 
 
-class ERecoVersion(BaseEnum):
+class ERecoVersion(_BaseEnum):
     """\
     [ Internal ]
 
@@ -173,7 +173,7 @@ class ERecoVersion(BaseEnum):
         return cls.UNKNOWN
 
 
-class EHornPosition(BaseEnum):
+class EHornPosition(_BaseEnum):
     """\
     [ Internal ]
 
@@ -195,7 +195,7 @@ class EHornPosition(BaseEnum):
         return cls.UNKNOWN
 
 
-class EHornCurrent(BaseEnum):
+class EHornCurrent(_BaseEnum):
     """\
     [ Internal ]
 
@@ -218,7 +218,7 @@ class EHornCurrent(BaseEnum):
 # Daikon Specific
 
 
-class EDaikonIntRegion(BaseEnum):
+class EDaikonIntRegion(_BaseEnum):
     """\
     [ Internal ]
 
@@ -250,7 +250,7 @@ class EDaikonIntRegion(BaseEnum):
         return cls.UNKNOWN
 
 
-class EDaikonFlavour(BaseEnum):
+class EDaikonFlavour(_BaseEnum):
     """\
     [ Internal ]
 
@@ -272,7 +272,7 @@ class EDaikonFlavour(BaseEnum):
     UNKNOWN = -1
 
 
-class EDaikonMagField(BaseEnum):
+class EDaikonMagField(_BaseEnum):
     """\
     [ Internal ]
 
