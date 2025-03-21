@@ -16,6 +16,9 @@ from __future__ import annotations
 __all__ = [
     # Package Constants
     "RESOURCES_PATH",
+    # Data Types
+    "IMAGE_DTYPE",
+    "NUM_DTYPE",
     # SNTP Branches
     "SNTP_BR_STD",
     "SNTP_BR_BDL",
@@ -52,7 +55,8 @@ with resources.path("oscana", "") as _path:
 
 # ============================== [ Data Types ] ============================== #
 
-_IMAGE_DTYPE: Final = np.float32
+IMAGE_DTYPE: Final = np.float32
+NUM_DTYPE: Final = np.float32
 
 # ============================ [ SNTP Branches  ] ============================ #
 
