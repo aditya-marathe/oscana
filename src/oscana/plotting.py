@@ -56,8 +56,9 @@ import matplotlib.scale as scl
 from matplotlib import patches
 
 from .themes import _load_settings
-from .utils import minos_numbers, EPlaneView
-from .evd import get_fd_event_images
+from .utils import minos_numbers
+from .images import get_fd_event_images
+from .constants import EPlaneView
 
 if TYPE_CHECKING:
     import numpy.typing as npt
@@ -684,9 +685,9 @@ def energy_estimator_resolution(
 
 
 def fd_event_pixel_images(
-    stp_planeview: npt.ArrayLike,
-    stp_strip: npt.ArrayLike,
-    stp_plane: npt.ArrayLike,
+    stp_planeview: npt.NDArray,
+    stp_strip: npt.NDArray,
+    stp_plane: npt.NDArray,
     **figure_kwargs,
 ) -> tuple[Figure, tuple[Axes, ...]]:
     """\
