@@ -18,7 +18,7 @@ from __future__ import annotations
 
 __all__ = [
     "MINOS_GUESSED_ENERGY_BINS",
-    "context",
+    "plotting_context",
     # Layouts
     "grid_layout",
     "spectrum_layout",
@@ -27,8 +27,8 @@ __all__ = [
     "energy_axs_scale",
     "spec_fig_cleanup",
     # Templates
-    "energy_estimator_resolution",
-    "fd_event_pixel_images",
+    "plot_energy_resolution",
+    "plot_fd_event_images",
     # Helpers
     "get_bin_centers",
 ]
@@ -236,7 +236,7 @@ def _axs_inv_transform(
 
 
 @contextmanager
-def context(theme_name: str = "slate") -> Generator[None, None, None]:
+def plotting_context(theme_name: str = "slate") -> Generator[None, None, None]:
     """\
     Context manager for setting the plotting theme.
 
@@ -581,7 +581,7 @@ def plot_hist_from_bins() -> ...:
 # ============================== [ Templates  ] ============================== #
 
 
-def energy_estimator_resolution(
+def plot_energy_resolution(
     reco_energy: npt.ArrayLike,
     mc_energy: npt.ArrayLike,
     algorithm_name: str = "",
@@ -684,7 +684,7 @@ def energy_estimator_resolution(
     return fig, axs, {"Mean": mean_resolution, "StD": std_resolution}
 
 
-def fd_event_pixel_images(
+def plot_fd_event_images(
     stp_planeview: npt.NDArray,
     stp_strip: npt.NDArray,
     stp_plane: npt.NDArray,
