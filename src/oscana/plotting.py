@@ -688,6 +688,8 @@ def fd_event_pixel_images(
     stp_planeview: npt.NDArray,
     stp_strip: npt.NDArray,
     stp_plane: npt.NDArray,
+    stp_ph0_pe: npt.NDArray | None = None,
+    stp_ph1_pe: npt.NDArray | None = None,
     **figure_kwargs,
 ) -> tuple[Figure, tuple[Axes, ...]]:
     """\
@@ -695,14 +697,17 @@ def fd_event_pixel_images(
 
     Parameters
     ----------
-    stp_planeview : npt.ArrayLike
-        The planeview of the event.
-        
-    stp_strip : npt.ArrayLike
-        The strip of the event.
+    plane : EPlaneView
+        The plane view to extract the images for (either U-Z or V-Z).
 
-    stp_plane : npt.ArrayLike
-        The plane of the event.
+    stp_planeview : npt.NDArray
+        The `stp.planeview` variable from the SNTP_BR_STD branch of SNTP files.
+
+    stp_strip : npt.NDArray
+        The `stp.strip` variable from the SNTP_BR_STD branch of SNTP files.
+
+    stp_plane : npt.NDArray
+        The `stp.plane` variable from the SNTP_BR_STD branch of SNTP files.
 
     Returns
     -------
@@ -724,6 +729,8 @@ def fd_event_pixel_images(
         stp_planeview=stp_planeview,
         stp_strip=stp_strip,
         stp_plane=stp_plane,
+        stp_ph0_pe=stp_ph0_pe,
+        stp_ph1_pe=stp_ph1_pe,
     )
 
     v_west_image, v_east_image = get_fd_event_images(
@@ -731,6 +738,8 @@ def fd_event_pixel_images(
         stp_planeview=stp_planeview,
         stp_strip=stp_strip,
         stp_plane=stp_plane,
+        stp_ph0_pe=stp_ph0_pe,
+        stp_ph1_pe=stp_ph1_pe,
     )
 
     imshow_kwargs: dict[str, Any] = {"origin": "lower", "aspect": "auto"}
