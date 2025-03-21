@@ -37,8 +37,6 @@ from .utils import *
 
 from . import data
 
-print(f"Oscana (v{__version__}) - Neutrino Oscillation Analysis Package.")
-
 
 def get_version() -> str:
     """\
@@ -50,6 +48,27 @@ def get_version() -> str:
         Version of the Oscana package.
     """
     return __version__
+
+
+def print_version(fancy: bool = False) -> None:
+    """\
+    Print the version of the Oscana package.
+
+    Parameters
+    ----------
+    fancy : bool, optional
+        Whether to print the version in a fancy format. Defaults to `False`.
+    """
+    basic_text = f"Oscana (v{__version__})"
+
+    if not fancy:
+        return print(basic_text)
+
+    text = f"{basic_text} - Neutrino Oscillation Analysis Package."
+
+    print("\n+" + "-" * (len(text) + 2) + "+")
+    print("| " + text + " |")
+    print("+" + "-" * (len(text) + 2) + "+\n")
 
 
 def init(
@@ -78,3 +97,6 @@ def init(
     )
     init_env_variables()
     init_minos_numbers()
+
+
+print_version(fancy=True)
