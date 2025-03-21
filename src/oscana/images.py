@@ -25,7 +25,7 @@ import numpy.typing as npt
 import scipy.sparse as sps
 
 from .utils import minos_numbers, _error
-from .constants import _IMAGE_DTYPE, EPlaneView
+from .constants import IMAGE_DTYPE, EPlaneView
 
 # ================================ [ Logger ] ================================ #
 
@@ -116,8 +116,8 @@ def _get_strip_plane_indices(
         stp_ph1_pe = stp_ph1_pe[plane_selection][west_selection]
         stp_ph0_pe = stp_ph0_pe[plane_selection][east_selection]
     else:
-        stp_ph1_pe = np.ones_like(strip_west, dtype=_IMAGE_DTYPE)
-        stp_ph0_pe = np.ones_like(strip_east, dtype=_IMAGE_DTYPE)
+        stp_ph1_pe = np.ones_like(strip_west, dtype=IMAGE_DTYPE)
+        stp_ph0_pe = np.ones_like(strip_east, dtype=IMAGE_DTYPE)
 
     return (
         (strip_west, plane_west),
@@ -136,7 +136,7 @@ def get_fd_event_images(
     stp_plane: npt.NDArray,
     stp_ph0_pe: npt.NDArray | None = None,
     stp_ph1_pe: npt.NDArray | None = None,
-) -> tuple[npt.NDArray[_IMAGE_DTYPE], npt.NDArray[_IMAGE_DTYPE]]:
+) -> tuple[npt.NDArray[IMAGE_DTYPE], npt.NDArray[IMAGE_DTYPE]]:
     """\
     Get the west and east FD event images for the given plane.
 
@@ -181,12 +181,8 @@ def get_fd_event_images(
     )
 
     # Fill the matrices
-    image_west = np.zeros(
-        shape=(fd_n_strips, fd_w_n_planes), dtype=_IMAGE_DTYPE
-    )
-    image_east = np.zeros(
-        shape=(fd_n_strips, fd_e_n_planes), dtype=_IMAGE_DTYPE
-    )
+    image_west = np.zeros(shape=(fd_n_strips, fd_w_n_planes), dtype=IMAGE_DTYPE)
+    image_east = np.zeros(shape=(fd_n_strips, fd_e_n_planes), dtype=IMAGE_DTYPE)
 
     image_west[west_indices] = digit_values[0]
     image_east[east_indices] = digit_values[1]
