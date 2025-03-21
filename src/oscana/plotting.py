@@ -1,5 +1,5 @@
 """\
-oscana / plot.py
+oscana / plotting.py
 
 --------------------------------------------------------------------------------
 
@@ -7,6 +7,11 @@ Author - Aditya Marathe
 Email  - aditya.marathe.20@ucl.ac.uk
 
 --------------------------------------------------------------------------------
+
+This module contains functions to help with plotting. Using the plotting context
+(`context`) allows the user to set the theme for the plot. The module also has
+templates for frequently used plots, so it is possible to create publishable
+plots with only one or two lines of code.
 """
 
 from __future__ import annotations
@@ -14,11 +19,18 @@ from __future__ import annotations
 __all__ = [
     "MINOS_GUESSED_ENERGY_BINS",
     "context",
-    "layout",
-    "modifiers",
-    "plot",
-    "template",
-    "helpers",
+    # Layouts
+    "grid_layout",
+    "spectrum_layout",
+    "fd_uv_view_layout",
+    # Modifiers
+    "energy_axs_scale",
+    "spec_fig_cleanup",
+    # Templates
+    "energy_estimator_resolution",
+    "fd_event_pixel_images",
+    # Helpers
+    "get_bin_centers",
 ]
 
 # Note: `layout`, `modifiers`, and `plot` are all (data) classes to organise
@@ -44,8 +56,8 @@ import matplotlib.scale as scl
 from matplotlib import patches
 
 from .themes import _load_settings
-from .utils import minos_numbers, PlaneView
-from .evd import get_fd_pixel_images
+from .utils import minos_numbers, EPlaneView
+from .evd import get_fd_event_images
 
 if TYPE_CHECKING:
     import numpy.typing as npt
@@ -53,9 +65,9 @@ if TYPE_CHECKING:
     from matplotlib.figure import Figure
     from matplotlib.axes import Axes
 
-# ================================ [ Logger ] ================================ #
+# =============================== [ Logging  ] =============================== #
 
-logger = logging.getLogger("Plot")
+_logger = logging.getLogger("Plot")
 
 # ============================== [ Constants  ] ============================== #
 
@@ -108,51 +120,7 @@ DEFAULT_X_AXIS_SEGMENTS: list[tuple[float, float, float]] = [
 ]
 DEFAULT_X_AXIS_TICKS: list[float] = [0, 5, 10, 15, 20, 30, 50]
 
-# =============================== [ Context  ] =============================== #
-
-
-@contextmanager
-def context(theme_name: str = "slate") -> Generator[None, None, None]:
-    """\
-    Context manager for setting the plotting theme.
-
-    Parameters
-    ----------
-    theme_name : str
-        Name of the theme to use for the plot. Defaults to "slate".
-    """
-    settings = _load_settings(theme_name=theme_name.lower())
-
-    # Keep the original rcParameters so we can reset them later...
-    original_params = {setting: mpl.rcParams[setting] for setting in settings}
-
-    # Change the rcPrameters to our custom settings...
-    mpl.rcParams.update(settings)
-
-    # Change warnings settings, so we don't keep getting the annoying "no
-    # artists found" warnings.
-    warnings.simplefilter("ignore", UserWarning)
-
-    logger.debug(
-        f"Entering the plotting context with '{theme_name}' theme. Warning "
-        "messages are temporarily supressed."
-    )
-
-    try:
-        yield  # Here, we are inside the context...
-    finally:
-        # Overwrite the rcParameters to their original values
-        mpl.rcParams.update(original_params)
-
-        # Unfilter warnings
-        warnings.simplefilter("default", UserWarning)
-
-        logger.debug(
-            "Exiting the plotting context. Warning messages are now enabled."
-        )
-
-
-# =============================== [ Layouts  ] =============================== #
+# =========================== [ Helper Functions ] =========================== #
 
 
 def _ensure_axs_tuple(axs: npt.NDArray | list[Axes] | Axes) -> tuple[Axes, ...]:
@@ -183,116 +151,7 @@ def _ensure_axs_tuple(axs: npt.NDArray | list[Axes] | Axes) -> tuple[Axes, ...]:
     return axs_return
 
 
-class _Layout:
-    __slots__ = []
-
-    @staticmethod
-    def grid(
-        n_rows: int = 1,
-        n_cols: int = 1,
-        share_x: bool = False,
-        share_y: bool = False,
-        **figure_kwargs,
-    ) -> tuple[Figure, tuple[Axes, ...]]:
-        """\
-        Create a grid layout for the plot.
-
-        Parameters
-        ----------
-        n_rows : int
-            Number of rows of subplots.
-        n_cols : int
-            Number of columns of subplots.
-        share_x : bool | str
-            Whether to share the x-axis.
-        share_y : bool | str
-            Whether to share the y-axis.
-
-        Returns
-        -------
-        Figure
-            Matplotlib `Figure` object.
-        tuple[Axes, ...]
-            Tuple of Matplotlib `Axes` object(s).
-
-
-        Notes
-        -----
-        A very lazy wrapper around `plt.subplots`.
-        """
-        fig, axs = plt.subplots(
-            nrows=n_rows,
-            ncols=n_cols,
-            sharex=share_x,
-            sharey=share_y,
-            **figure_kwargs,
-        )
-
-        logger.debug(f"Created a {n_rows}x{n_cols} grid layout.")
-
-        return fig, _ensure_axs_tuple(axs=axs)
-
-    @staticmethod
-    def spec(
-        show_ratio: bool = False,
-        show_resolution: bool = False,
-        **figure_kwargs,
-    ) -> tuple[Figure, tuple[Axes, ...]]:
-        """\
-        Create a custom layout for a spectrum plot.
-
-        Parameters
-        ----------
-        show_ratio : bool
-            Whether to show the "ratio" subplot.
-        show_resolution : bool
-            Whether to show the "resolution" subplot.
-
-        Returns
-        -------
-        Figure
-            Matplotlib `Figure` object.
-        tuple[Axes, ...]
-            Tuple of Matplotlib `Axes` object(s).
-        """
-        fig = plt.figure(**figure_kwargs)
-
-        gs = gridspec.GridSpec(
-            1 + show_ratio,
-            1 + show_resolution,
-            figure=fig,
-            height_ratios=[2.5, 1] if show_ratio else [1],
-            width_ratios=[2, 1] if show_resolution else [1],
-        )
-
-        axs = []
-
-        ax_energy = fig.add_subplot(gs[0])
-        axs.append(ax_energy)
-
-        if show_ratio:
-            ax_ratio = fig.add_subplot(gs[1 + show_resolution])
-            axs.append(ax_ratio)
-
-        if show_resolution:
-            ax_resolution = fig.add_subplot(gs[:, 1])
-            axs.append(ax_resolution)
-
-        logger.debug(
-            "Created a spectrum plot layout. "
-            + ("+ MC-Data ratio plot. " if show_ratio else "")
-            + ("+ Plot of energy resolution." if show_resolution else "")
-        )
-
-        return fig, _ensure_axs_tuple(axs=axs)
-
-
-layout = _Layout()
-
-# ============================== [ Modifiers  ] ============================== #
-
-
-def _fwd_transform(
+def _axs_fwd_transform(
     segments: list[tuple[float, float, float]], array: npt.ArrayLike
 ) -> np.ndarray:
     """\
@@ -317,6 +176,10 @@ def _fwd_transform(
 
     offset = 0
 
+    # Note: I wrote this code a really, really long time ago. Looking it at now,
+    #       I have no idea what it actually does, but it seems to be working
+    #       just fine.
+
     for segment in segments:
         idx = (array > segment[0]) & (array <= segment[1])
         transformed_axis[idx] = offset + (array[idx] - segment[0]) * (
@@ -325,12 +188,12 @@ def _fwd_transform(
 
         offset += segment[2]
 
-    logger.debug("Applied the forward transform to compress the energy axis.")
+    _logger.debug("Applied the forward transform to compress the energy axis.")
 
     return transformed_axis
 
 
-def _inv_transform(
+def _axs_inv_transform(
     segments: list[tuple[float, float, float]], array: npt.ArrayLike
 ) -> np.ndarray:
     """\
@@ -361,393 +224,555 @@ def _inv_transform(
 
         offset += segment[2]
 
-    logger.debug(
+    _logger.debug(
         "Applied the inverse transform to return the energy axis to normal."
     )
 
     return original_axis
 
 
-class _Modifiers:
-    @staticmethod
-    def energy_axs_scale(
-        ax: Axes,
-        segments: list[tuple[float, float, float]] | None = None,
-        x_ticks: npt.ArrayLike | None = None,
-        which_axis: Literal["x", "y"] = "x",
-    ) -> None:
-        """\
-        Set the x-axis scale for an energy spectrum plot.
+# =============================== [ Context  ] =============================== #
 
-        Parameters
-        ----------
-        ax : Axes
-            Matplotlib `Axes` object.
-        segments : list[tuple[float, float, float]]
-            List of tuples, where each tuple contains the start, end, and step 
-            of the segment. Set to default configuration if `None` is given.
-            
-        x_ticks : npt.ArrayLike
-            Array of x-axis ticks. Set to default configuration if `None` is 
-            given.
-            
-        which_axis : str
-            Which axis to set the scale for. Defaults to "x".
-        """
-        if segments is None:
-            segments = DEFAULT_X_AXIS_SEGMENTS
 
-        if x_ticks is None:
-            x_ticks = DEFAULT_X_AXIS_TICKS
+@contextmanager
+def context(theme_name: str = "slate") -> Generator[None, None, None]:
+    """\
+    Context manager for setting the plotting theme.
 
-        ax.set_xscale(
-            scl.FuncScale(
-                axis=(ax.xaxis if which_axis == "x" else ax.yaxis),
-                functions=(
-                    lambda x: _fwd_transform(segments=segments, array=x),
-                    lambda x: _inv_transform(segments=segments, array=x),
-                ),
-            )
+    Parameters
+    ----------
+    theme_name : str
+        Name of the theme to use for the plot. Defaults to "slate".
+    """
+    settings = _load_settings(theme_name=theme_name.lower())
+
+    # Keep the original rcParameters so we can reset them later...
+    original_params = {setting: mpl.rcParams[setting] for setting in settings}
+
+    # Change the rcPrameters to our custom settings...
+    mpl.rcParams.update(settings)
+
+    # Change warnings settings, so we don't keep getting the annoying "no
+    # artists found" warnings.
+    warnings.simplefilter("ignore", UserWarning)
+
+    _logger.debug(
+        f"Entering the plotting context with '{theme_name}' theme. Warning "
+        "messages are temporarily supressed."
+    )
+
+    try:
+        yield  # Here, we are inside the context...
+    finally:
+        # Overwrite the rcParameters to their original values
+        mpl.rcParams.update(original_params)
+
+        # Unfilter warnings
+        warnings.simplefilter("default", UserWarning)
+
+        _logger.debug(
+            "Exiting the plotting context. Warning messages are now enabled."
         )
-        ax.set_xticks(x_ticks)
-
-        logger.debug("Modified the energy x-axis.")
-
-    @staticmethod
-    def spec_fig_cleanup(
-        fig: Figure,
-        ax_energy: Axes,
-        ax_ratio: Axes | None = None,
-        ax_resolution: Axes | None = None,
-    ) -> None:
-
-        axs_edge_colour = plt.rcParams["axes.edgecolor"]
-
-        if ax_ratio is not None:
-            ax_ratio.axhline(
-                0,
-                color=axs_edge_colour,
-                linestyle="dashed",
-                linewidth=plt.rcParams["xtick.major.width"],
-            )
-            ax_energy.set_xticklabels([])
-            ax_ratio.set_ylim(-1.0, 1.0)
-            ax_ratio.set_yticks([-0.5, 0, 0.5])
-
-        if ax_resolution is not None:
-            ax_resolution.axvline(
-                0,
-                color=axs_edge_colour,
-                linestyle="dashed",
-                linewidth=plt.rcParams["xtick.major.width"],
-            )
-            ax_resolution.yaxis.set_label_position("right")
-            ax_resolution.tick_params(
-                axis="y", labelleft=False, labelright=True
-            )
-            ax_resolution.set_xlim(-1, 1)
-            ax_resolution.set_xticks([-0.5, 0, 0.5])
-
-        # Werid trick to make the plot fill the entire figure...
-
-        fig.tight_layout()
-
-        if ax_ratio is not None:
-            fig.subplots_adjust(hspace=0.0)
-
-        if ax_resolution is not None:
-            fig.subplots_adjust(wspace=0.05)
-
-        logger.debug("Cleaned up the spectrum plot figure.")
 
 
-modifiers = _Modifiers()
+# =============================== [ Layouts  ] =============================== #
+
+
+def grid_layout(
+    n_rows: int = 1,
+    n_cols: int = 1,
+    share_x: bool = False,
+    share_y: bool = False,
+    **figure_kwargs,
+) -> tuple[Figure, tuple[Axes, ...]]:
+    """\
+    Creates a simple grid layout for the plot.
+
+    Parameters
+    ----------
+    n_rows : int
+        Number of rows of subplots.
+    
+    n_cols : int
+        Number of columns of subplots.
+    
+    share_x : bool | str
+        Whether to share the x-axis.
+    
+    share_y : bool | str
+        Whether to share the y-axis.
+
+    Returns
+    -------
+    tuple[Figure, tuple[Axes, ...]]
+        Matplotlib `Figure` object and a tuple of Matplotlib `Axes` object(s).
+    """
+    fig, axs = plt.subplots(
+        nrows=n_rows,
+        ncols=n_cols,
+        sharex=share_x,
+        sharey=share_y,
+        **figure_kwargs,
+    )
+
+    _logger.debug(f"Created a {n_rows}x{n_cols} grid layout.")
+
+    return fig, _ensure_axs_tuple(axs=axs)
+
+
+def spectrum_layout(
+    show_ratio: bool = False,
+    show_resolution: bool = False,
+    **figure_kwargs,
+) -> tuple[Figure, tuple[Axes, ...]]:
+    """\
+    Create a custom layout for a spectrum plot.
+
+    Parameters
+    ----------
+    show_ratio : bool
+        Whether to show the "ratio" subplot.
+    
+    show_resolution : bool
+        Whether to show the "resolution" subplot.
+
+    Returns
+    -------
+    tuple[Figure, tuple[Axes, ...]]
+        Matplotlib `Figure` object and a tuple of Matplotlib `Axes` object(s).
+    """
+    fig = plt.figure(**figure_kwargs)
+
+    gs = gridspec.GridSpec(
+        1 + show_ratio,
+        1 + show_resolution,
+        figure=fig,
+        height_ratios=[2.5, 1] if show_ratio else [1],
+        width_ratios=[2, 1] if show_resolution else [1],
+    )
+
+    axs = []
+
+    ax_energy = fig.add_subplot(gs[0])
+    axs.append(ax_energy)
+
+    if show_ratio:
+        ax_ratio = fig.add_subplot(gs[1 + show_resolution])
+        axs.append(ax_ratio)
+
+    if show_resolution:
+        ax_resolution = fig.add_subplot(gs[:, 1])
+        axs.append(ax_resolution)
+
+    _logger.debug(
+        "Created a spectrum plot layout. "
+        + ("+ MC-Data ratio plot. " if show_ratio else "")
+        + ("+ Plot of energy resolution." if show_resolution else "")
+    )
+
+    return fig, _ensure_axs_tuple(axs=axs)
+
+
+def fd_uv_view_layout(
+    **figure_kwargs,
+) -> tuple[Figure, tuple[Axes, ...]]:
+    """\
+    Create a custom layout for the far detector U-Z and V-Z plane views.
+
+    Returns
+    -------
+    tuple[Figure, tuple[Axes, ...]]
+        Matplotlib `Figure` object and a tuple of Matplotlib `Axes` object(s).
+    """
+    axs_edge_colour = plt.rcParams["axes.edgecolor"]
+
+    fd_depths = np.asarray(
+        [
+            minos_numbers["FD"]["West"]["D"],
+            minos_numbers["FD"]["AirGap"]["D"],
+            minos_numbers["FD"]["East"]["D"],
+        ]
+    )
+
+    fd_depth_ratios = fd_depths / fd_depths.sum()
+
+    fig, axs = grid_layout(
+        n_rows=2,
+        n_cols=3,
+        constrained_layout=False,
+        width_ratios=fd_depth_ratios,
+        **figure_kwargs,
+    )
+
+    fig.subplots_adjust(wspace=0)
+
+    # Indicating the air gap...
+    axs[1].add_patch(
+        patches.Rectangle(
+            (0, 0),
+            1,
+            1,
+            linewidth=0.5,
+            edgecolor=axs_edge_colour,
+            facecolor="none",
+            hatch="//",
+        )
+    )
+    axs[4].add_patch(
+        patches.Rectangle(
+            (0, 0),
+            1,
+            1,
+            linewidth=0.5,
+            edgecolor=axs_edge_colour,
+            facecolor="none",
+            hatch="//",
+        )
+    )
+
+    x_label = "Plane Number".upper()
+    y_label = "Strip Number".upper()
+
+    axs[0].tick_params(which="both", right=False)
+    axs[0].set_ylabel(y_label)
+    axs[1].set_yticks([])
+    axs[1].set_xticks([])
+    axs[1].set_yticklabels([])
+    axs[1].set_xticklabels([])
+    axs[2].tick_params(which="both", left=False, labelleft=False)
+    axs[3].tick_params(which="both", right=False)
+    axs[3].set_ylabel(y_label)
+    axs[4].set_yticks([])
+    axs[4].set_xticks([])
+    axs[4].set_yticklabels([])
+    axs[4].set_xticklabels([])
+    axs[5].tick_params(which="both", left=False, labelleft=False)
+
+    fig.supxlabel(
+        x_label,
+        fontsize=axs[0].xaxis.label.get_fontsize(),
+        transform=axs[1].xaxis.label.get_transform(),
+    )
+
+    return fig, axs
+
+
+# ============================== [ Modifiers  ] ============================== #
+
+
+def energy_axs_scale(
+    ax: Axes,
+    segments: list[tuple[float, float, float]] | None = None,
+    x_ticks: npt.ArrayLike | None = None,
+    which_axis: Literal["x", "y"] = "x",
+) -> None:
+    """\
+    Set the x-axis scale for an energy spectrum plot.
+
+    Parameters
+    ----------
+    ax : Axes
+        Matplotlib `Axes` object.
+    
+    segments : list[tuple[float, float, float]]
+        List of tuples, where each tuple contains the start, end, and step 
+        of the segment. Set to default configuration if `None` is given.
+        
+    x_ticks : npt.ArrayLike
+        Array of x-axis ticks. Set to default configuration if `None` is 
+        given.
+        
+    which_axis : str
+        Which axis to set the scale for. Defaults to "x".
+    """
+    if segments is None:
+        segments = DEFAULT_X_AXIS_SEGMENTS
+
+    if x_ticks is None:
+        x_ticks = DEFAULT_X_AXIS_TICKS
+
+    ax.set_xscale(
+        scl.FuncScale(
+            axis=(ax.xaxis if which_axis == "x" else ax.yaxis),
+            functions=(
+                lambda x: _axs_fwd_transform(segments=segments, array=x),
+                lambda x: _axs_inv_transform(segments=segments, array=x),
+            ),
+        )
+    )
+    ax.set_xticks(x_ticks)
+
+    _logger.debug("Modified the energy x-axis.")
+
+
+def spec_fig_cleanup(
+    fig: Figure,
+    ax_energy: Axes,
+    ax_ratio: Axes | None = None,
+    ax_resolution: Axes | None = None,
+) -> None:
+    """\
+    Cleans up the spectrum plot figure.
+
+    Parameters
+    ----------
+    fig : Figure
+        Matplotlib `Figure` object.
+
+    ax_energy : Axes
+        Matplotlib `Axes` object for the energy spectrum plot.
+
+    ax_ratio : Axes
+        Matplotlib `Axes` object for the ratio plot. Defaults to `None`.
+
+    ax_resolution : Axes
+        Matplotlib `Axes` object for the resolution plot. Defaults to `None`.
+    """
+    axs_edge_colour = plt.rcParams["axes.edgecolor"]
+
+    if ax_ratio is not None:
+        ax_ratio.axhline(
+            0,
+            color=axs_edge_colour,
+            linestyle="dashed",
+            linewidth=plt.rcParams["xtick.major.width"],
+        )
+        ax_energy.set_xticklabels([])
+        ax_ratio.set_ylim(-1.0, 1.0)
+        ax_ratio.set_yticks([-0.5, 0, 0.5])
+
+    if ax_resolution is not None:
+        ax_resolution.axvline(
+            0,
+            color=axs_edge_colour,
+            linestyle="dashed",
+            linewidth=plt.rcParams["xtick.major.width"],
+        )
+        ax_resolution.yaxis.set_label_position("right")
+        ax_resolution.tick_params(axis="y", labelleft=False, labelright=True)
+        ax_resolution.set_xlim(-1, 1)
+        ax_resolution.set_xticks([-0.5, 0, 0.5])
+
+    # Werid trick to make the plot fill the entire figure...
+
+    fig.tight_layout()
+
+    if ax_ratio is not None:
+        fig.subplots_adjust(hspace=0.0)
+
+    if ax_resolution is not None:
+        fig.subplots_adjust(wspace=0.05)
+
+    _logger.debug("Cleaned up the spectrum plot figure.")
+
 
 # =============================== [ Plotting ] =============================== #
 
 
-class _Plot:
-    @staticmethod
-    def hist() -> ...: ...
-
-    @staticmethod
-    def hist_from_bins() -> ...: ...
+def plot_hist() -> ...:
+    pass
 
 
-plot = _Plot()
+def plot_hist_from_bins() -> ...:
+    pass
+
 
 # ============================== [ Templates  ] ============================== #
 
 
-class _Template:
-    @staticmethod
-    def energy_estimator_resolution(
-        reco_energy: npt.ArrayLike,
-        mc_energy: npt.ArrayLike,
-        algorithm_name: str = "",
-        **figure_kwargs,
-    ) -> tuple[Figure, tuple[Axes, ...], dict[str, float]]:
-        """\
-        Plot the resolution of an energy estimator.
+def energy_estimator_resolution(
+    reco_energy: npt.ArrayLike,
+    mc_energy: npt.ArrayLike,
+    algorithm_name: str = "",
+    **figure_kwargs,
+) -> tuple[Figure, tuple[Axes, ...], dict[str, float]]:
+    """\
+    Plot the resolution of an energy estimator.
 
-        Parameters
-        ----------
-        reco_energy : npt.ArrayLike
-            Reconstructed energy using the algorithm.
-            
-        mc_energy : npt.ArrayLike
-            True energy.
-            
-        algorithm_name : str
-            Optional: Name of the algorithm used to estimate the energy.
+    Parameters
+    ----------
+    reco_energy : npt.ArrayLike
+        Reconstructed energy using the algorithm.
+        
+    mc_energy : npt.ArrayLike
+        True energy.
+        
+    algorithm_name : str
+        Optional: Name of the algorithm used to estimate the energy.
 
-        Returns
-        -------
-        Figure
-            Matplotlib `Figure` object.
-            
-        tuple[Axes, ...]
-            Tuple of Matplotlib `Axes` object(s).
-            
-        dict[str, float]
-            Dictionary containing the mean and standard deviation of the energy
-            resolution distribution in the keys 'Mean' and 'Std' respectively.
-        """
-        reco_energy = np.asarray(reco_energy)
-        mc_energy = np.asarray(mc_energy)
+    Returns
+    -------
+    Figure
+        Matplotlib `Figure` object.
+        
+    tuple[Axes, ...]
+        Tuple of Matplotlib `Axes` object(s).
+        
+    dict[str, float]
+        Dictionary containing the mean and standard deviation of the energy
+        resolution distribution in the keys 'Mean' and 'Std' respectively.
+    """
+    reco_energy = np.asarray(reco_energy)
+    mc_energy = np.asarray(mc_energy)
 
-        fig, axs = layout.spec(
-            show_ratio=True, show_resolution=True, **figure_kwargs
-        )
+    fig, axs = spectrum_layout(
+        show_ratio=True, show_resolution=True, **figure_kwargs
+    )
 
-        ax = axs[0]
+    ax = axs[0]
 
-        reco_bin_heights, _, _ = ax.hist(
-            reco_energy,
-            bins=MINOS_GUESSED_ENERGY_BINS,
-            label="RECO.",
-        )
+    reco_bin_heights, _, _ = ax.hist(
+        reco_energy,
+        bins=MINOS_GUESSED_ENERGY_BINS,
+        label="RECO.",
+    )
 
-        mc_bin_heights, bin_edges, _ = ax.hist(
-            mc_energy,
-            bins=MINOS_GUESSED_ENERGY_BINS,
-            histtype="step",
-            label="MC",
-        )
+    mc_bin_heights, bin_edges, _ = ax.hist(
+        mc_energy,
+        bins=MINOS_GUESSED_ENERGY_BINS,
+        histtype="step",
+        label="MC",
+    )
 
-        modifiers.energy_axs_scale(ax)
+    energy_axs_scale(ax)
 
-        ax.set_title(algorithm_name.upper())
-        ax.set_ylabel("Events".upper())
-        ax.legend()
+    ax.set_title(algorithm_name.upper())
+    ax.set_ylabel("Events".upper())
+    ax.legend()
 
-        ax = axs[1]
+    ax = axs[1]
 
-        ax.set_xlabel("Neutrino Energy, ".upper() + r"$E_\nu$ [GeV]")
-        ax.set_ylabel("Ratio - 1".upper())
+    ax.set_xlabel("Neutrino Energy, ".upper() + r"$E_\nu$ [GeV]")
+    ax.set_ylabel("Ratio - 1".upper())
 
-        mc_bin_heights = np.asarray(mc_bin_heights)
-        reco_bin_heights = np.asarray(reco_bin_heights)
+    mc_bin_heights = np.asarray(mc_bin_heights)
+    reco_bin_heights = np.asarray(reco_bin_heights)
 
-        ax.plot(
-            helpers.get_bin_centers(bin_edges=bin_edges),
-            (mc_bin_heights / reco_bin_heights) - 1,
-            "o",
-        )
+    ax.plot(
+        get_bin_centers(bin_edges=bin_edges),
+        (mc_bin_heights / reco_bin_heights) - 1,
+        "o",
+    )
 
-        modifiers.energy_axs_scale(ax)
+    energy_axs_scale(ax)
 
-        ax = axs[2]
+    ax = axs[2]
 
-        resolution = (mc_energy / reco_energy) - 1
-        mean_resolution = float(np.mean(resolution))
-        std_resolution = float(np.std(resolution))
+    resolution = (mc_energy / reco_energy) - 1
+    mean_resolution = float(np.mean(resolution))
+    std_resolution = float(np.std(resolution))
 
-        ax.hist(
-            resolution,
-            bins=np.linspace(-1, 1, 30),  # pyright: ignore reportArgumentType
-        )
+    ax.hist(
+        resolution,
+        bins=np.linspace(-1, 1, 30),  # pyright: ignore reportArgumentType
+    )
 
-        ax.set_title(
-            r"$\mu=$"
-            + f"{mean_resolution:6.4f}, "
-            + r"$\sigma=$"
-            + f"{std_resolution:6.4f}"
-        )
-        ax.set_xlabel(r"$E_\nu$" + " Resolution".upper())
-        ax.set_ylabel("Frequency".upper())
+    ax.set_title(
+        r"$\mu=$"
+        + f"{mean_resolution:6.4f}, "
+        + r"$\sigma=$"
+        + f"{std_resolution:6.4f}"
+    )
+    ax.set_xlabel(r"$E_\nu$" + " Resolution".upper())
+    ax.set_ylabel("Frequency".upper())
 
-        modifiers.spec_fig_cleanup(fig, *axs)
+    spec_fig_cleanup(fig, *axs)
 
-        logger.debug("Using the 'Energy Estimator' template.")
+    _logger.debug("Using the 'Energy Estimator' template.")
 
-        return fig, axs, {"Mean": mean_resolution, "StD": std_resolution}
-
-    @staticmethod
-    def fd_event_pixel_images(
-        stp_planeview: npt.ArrayLike,
-        stp_strip: npt.ArrayLike,
-        stp_plane: npt.ArrayLike,
-        **figure_kwargs,
-    ) -> tuple[Figure, tuple[Axes, ...]]:
-        """\
-        Plot the pixel images of the event.
-
-        Parameters
-        ----------
-        stp_planeview : npt.ArrayLike
-            The planeview of the event.
-            
-        stp_strip : npt.ArrayLike
-            The strip of the event.
-
-        stp_plane : npt.ArrayLike
-            The plane of the event.
-
-        Returns
-        -------
-        Figure
-            Matplotlib `Figure` object.
-            
-        tuple[Axes, ...]
-            Tuple of Matplotlib `Axes` object(s).
-        """
-        axs_edge_colour = plt.rcParams["axes.edgecolor"]
-
-        fd_depths = np.asarray(
-            [
-                minos_numbers["FD"]["West"]["D"],
-                minos_numbers["FD"]["AirGap"]["D"],
-                minos_numbers["FD"]["East"]["D"],
-            ]
-        )
-
-        fd_depth_ratios = fd_depths / fd_depths.sum()
-
-        fd_w_n_planes: int = minos_numbers["FD"]["West"]["NPlanes"]
-        fd_e_n_planes: int = minos_numbers["FD"]["East"]["NPlanes"]
-
-        fd_n_strips = minos_numbers["FD"]["NStripsPerPlane"]
-
-        u_west_image, u_east_image = get_fd_pixel_images(
-            plane=PlaneView.U,
-            stp_planeview=stp_planeview,
-            stp_strip=stp_strip,
-            stp_plane=stp_plane,
-        )
-
-        v_west_image, v_east_image = get_fd_pixel_images(
-            plane=PlaneView.V,
-            stp_planeview=stp_planeview,
-            stp_strip=stp_strip,
-            stp_plane=stp_plane,
-        )
-
-        fig, axs = layout.grid(
-            n_rows=2,
-            n_cols=3,
-            constrained_layout=False,
-            width_ratios=fd_depth_ratios,
-            **figure_kwargs,
-        )
-
-        fig.subplots_adjust(wspace=0)
-
-        imshow_kwargs: dict[str, Any] = {"origin": "lower", "aspect": "auto"}
-        west_extent: tuple[int, int, int, int] = (
-            0,
-            fd_w_n_planes,
-            0,
-            fd_n_strips,
-        )
-        east_extent: tuple[int, int, int, int] = (
-            fd_w_n_planes,
-            fd_w_n_planes + fd_e_n_planes,
-            0,
-            fd_n_strips,
-        )
-
-        # Plotting the images...
-        axs[0].imshow(u_west_image, extent=west_extent, **imshow_kwargs)
-        axs[1].add_patch(
-            patches.Rectangle(
-                (0, 0),
-                1,
-                1,
-                linewidth=0.5,
-                edgecolor=axs_edge_colour,
-                facecolor="none",
-                hatch="//",
-            )
-        )
-        axs[2].imshow(u_east_image, extent=east_extent, **imshow_kwargs)
-
-        axs[3].imshow(v_west_image, extent=west_extent, **imshow_kwargs)
-        axs[4].add_patch(
-            patches.Rectangle(
-                (0, 0),
-                1,
-                1,
-                linewidth=0.5,
-                edgecolor=axs_edge_colour,
-                facecolor="none",
-                hatch="//",
-            )
-        )
-        axs[5].imshow(v_east_image, extent=east_extent, **imshow_kwargs)
-
-        x_label = "Plane Number".upper()
-        y_label = "Strip Number".upper()
-
-        axs[0].tick_params(which="both", right=False)
-        axs[0].set_ylabel(y_label)
-        axs[1].set_yticks([])
-        axs[1].set_xticks([])
-        axs[1].set_yticklabels([])
-        axs[1].set_xticklabels([])
-        axs[2].tick_params(which="both", left=False, labelleft=False)
-        axs[3].tick_params(which="both", right=False)
-        axs[3].set_ylabel(y_label)
-        axs[4].set_yticks([])
-        axs[4].set_xticks([])
-        axs[4].set_yticklabels([])
-        axs[4].set_xticklabels([])
-        # axs[4].set_xlabel(x_label)
-        axs[5].tick_params(which="both", left=False, labelleft=False)
-
-        fig.supxlabel(
-            x_label,
-            fontsize=axs[0].xaxis.label.get_fontsize(),
-            transform=axs[1].xaxis.label.get_transform(),
-        )
-
-        return fig, axs
+    return fig, axs, {"Mean": mean_resolution, "StD": std_resolution}
 
 
-template = _Template()
+def fd_event_pixel_images(
+    stp_planeview: npt.ArrayLike,
+    stp_strip: npt.ArrayLike,
+    stp_plane: npt.ArrayLike,
+    **figure_kwargs,
+) -> tuple[Figure, tuple[Axes, ...]]:
+    """\
+    Plot the pixel images of the event.
+
+    Parameters
+    ----------
+    stp_planeview : npt.ArrayLike
+        The planeview of the event.
+        
+    stp_strip : npt.ArrayLike
+        The strip of the event.
+
+    stp_plane : npt.ArrayLike
+        The plane of the event.
+
+    Returns
+    -------
+    Figure
+        Matplotlib `Figure` object.
+        
+    tuple[Axes, ...]
+        Tuple of Matplotlib `Axes` object(s).
+    """
+    fig, axs = fd_uv_view_layout(**figure_kwargs)
+
+    fd_w_n_planes: int = minos_numbers["FD"]["West"]["NPlanes"]
+    fd_e_n_planes: int = minos_numbers["FD"]["East"]["NPlanes"]
+    fd_n_strips = minos_numbers["FD"]["NStripsPerPlane"]
+
+    # Getting the pixel images...
+    u_west_image, u_east_image = get_fd_event_images(
+        plane=EPlaneView.U,
+        stp_planeview=stp_planeview,
+        stp_strip=stp_strip,
+        stp_plane=stp_plane,
+    )
+
+    v_west_image, v_east_image = get_fd_event_images(
+        plane=EPlaneView.V,
+        stp_planeview=stp_planeview,
+        stp_strip=stp_strip,
+        stp_plane=stp_plane,
+    )
+
+    imshow_kwargs: dict[str, Any] = {"origin": "lower", "aspect": "auto"}
+    west_extent: tuple[int, int, int, int] = (
+        0,
+        fd_w_n_planes,
+        0,
+        fd_n_strips,
+    )
+    east_extent: tuple[int, int, int, int] = (
+        fd_w_n_planes,
+        fd_w_n_planes + fd_e_n_planes,
+        0,
+        fd_n_strips,
+    )
+
+    # Plotting the images...
+    axs[0].imshow(u_west_image, extent=west_extent, **imshow_kwargs)
+    axs[2].imshow(u_east_image, extent=east_extent, **imshow_kwargs)
+
+    axs[3].imshow(v_west_image, extent=west_extent, **imshow_kwargs)
+    axs[5].imshow(v_east_image, extent=east_extent, **imshow_kwargs)
+
+    return fig, axs
+
 
 # =============================== [ Helpers  ] =============================== #
 
 
-class _Helpers:
-    @staticmethod
-    def get_bin_centers(bin_edges: npt.ArrayLike) -> npt.NDArray:
-        """\
-        Get the bin centers from the bin edges.
+def get_bin_centers(bin_edges: npt.ArrayLike) -> npt.NDArray:
+    """\
+    Get the bin centers from the bin edges.
 
-        Parameters
-        ----------
-        bin_edges : npt.ArrayLike
-            The bin edges.
+    Parameters
+    ----------
+    bin_edges : npt.ArrayLike
+        The bin edges.
 
-        Returns
-        -------
-        np.ndarray
-            The bin centers.
-        """
-        bin_edges = np.asarray(bin_edges)
+    Returns
+    -------
+    np.ndarray
+        The bin centers.
+    """
+    bin_edges = np.asarray(bin_edges)
 
-        return (bin_edges[:-1] + bin_edges[1:]) / 2
-
-
-helpers = _Helpers()
+    return (bin_edges[:-1] + bin_edges[1:]) / 2
