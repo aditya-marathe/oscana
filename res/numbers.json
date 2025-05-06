@@ -1,22 +1,31 @@
 {
     "FD": {
         "TotMass": 5.4,
+        "TotMassUnits": "kT",
         "FidMass": 3.3,
-        "West": {
+        "FidMassUnits": "kT",
+        "South": {
             "H": 8.0,
+            "HUnits": "m",
             "W": 8.0,
+            "WUnits": "m",
             "D": 15.0,
+            "DUnits": "m",
             "NPlanes": 242
         },
-        "East": {
+        "North": {
             "H": 8.0,
+            "HUnits": "m",
             "W": 8.0,
+            "WUnits": "m",
             "D": 15.0,
+            "DUnits": "m",
             "NPlanes": 243
         },
         "NStripsPerPlane": 192,
         "AirGap": {
-            "D": 1.0
+            "D": 1.1,
+            "DUnits": "m"
         }
     }
 }
