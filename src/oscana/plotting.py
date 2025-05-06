@@ -22,24 +22,19 @@ __all__ = [
     # Layouts
     "grid_layout",
     "spectrum_layout",
-    "fd_uv_view_layout",
+    "fd_uv_views_layout",
     # Modifiers
     "energy_axs_scale",
     "spec_fig_cleanup",
+    # Plotting
+    "plot_hist",
+    # "plot_hist_from_heights",
     # Templates
     "plot_energy_resolution",
-    "plot_fd_event_images",
+    "plot_fd_event_image",
     # Helpers
     "get_bin_centers",
 ]
-
-# Note: `layout`, `modifiers`, and `plot` are all (data) classes to organise
-#       functions. In every senario using a dictionary is faster, but we
-#       sacrifice the code readability. Since we are only plotting, it is ok to
-#       sacrifice speed for readability.
-#
-#       Usually, I think, it is not a good idea to hide this kind of complexity
-#       and it is better to use dictionaries.
 
 from typing import Generator, Literal, Any, TYPE_CHECKING
 
@@ -55,9 +50,10 @@ import matplotlib.gridspec as gridspec
 import matplotlib.scale as scl
 from matplotlib import patches
 
+from .logger import _error
 from .themes import _load_settings
 from .utils import minos_numbers
-from .images import get_fd_event_images
+from .images import create_fd_split_image
 from .constants import EPlaneView
 
 if TYPE_CHECKING:
@@ -374,7 +370,7 @@ def spectrum_layout(
     return fig, _ensure_axs_tuple(axs=axs)
 
 
-def fd_uv_view_layout(
+def fd_uv_views_layout(
     **figure_kwargs,
 ) -> tuple[Figure, tuple[Axes, ...]]:
     """\
@@ -389,9 +385,9 @@ def fd_uv_view_layout(
 
     fd_depths = np.asarray(
         [
-            minos_numbers["FD"]["West"]["D"],
+            minos_numbers["FD"]["South"]["D"],
             minos_numbers["FD"]["AirGap"]["D"],
-            minos_numbers["FD"]["East"]["D"],
+            minos_numbers["FD"]["North"]["D"],
         ]
     )
 
@@ -431,8 +427,8 @@ def fd_uv_view_layout(
         )
     )
 
-    axs[0].text(12, 170, "U-Z Plane".upper())
-    axs[3].text(12, 170, "V-Z Plane".upper())
+    axs[0].text(0.07, 0.87, "U-Z Plane".upper(), transform=axs[0].transAxes)
+    axs[3].text(0.07, 0.87, "V-Z Plane".upper(), transform=axs[3].transAxes)
 
     x_label = "Plane Number".upper()
     y_label = "Strip Number".upper()
@@ -573,11 +569,44 @@ def spec_fig_cleanup(
 # =============================== [ Plotting ] =============================== #
 
 
-def plot_hist() -> ...:
-    pass
+def plot_hist(
+    data: npt.NDArray,
+    bins: int | npt.NDArray,
+    # Optional Figure & Axes
+    fig: Figure | None = None,
+    ax: Axes | None = None,
+    **hist_kwargs,
+) -> tuple[Figure, Axes, dict[str, float | npt.NDArray]]:
+    if (fig is None) or (ax is None):
+        fig, (ax, *_) = grid_layout()
+
+    # (1) Plot the histogram.
+
+    bin_heights, bin_edges, _ = ax.hist(
+        data,
+        bins=bins,  # pyright: ignore reportArgumentType
+        **hist_kwargs,
+    )
+
+    # (2) Calculate histogram and stats info.
+
+    info: dict[str, float | npt.NDArray] = {
+        # Histogram
+        "BinHeights": np.asarray(bin_heights, dtype=float),
+        "BinEdges": np.asarray(bin_edges, dtype=float),
+        "BinCenters": get_bin_centers(bin_edges=bin_edges),
+        # Stats
+        "Mean": float(np.mean(data)),
+        "StD": float(np.std(data)),
+        "Min": float(np.min(data)),
+        "Max": float(np.max(data)),
+        "Median": float(np.median(data)),
+    }
+
+    return fig, ax, info
 
 
-def plot_hist_from_bins() -> ...:
+def plot_hist_from_heights() -> ...:
     pass
 
 
@@ -687,13 +716,13 @@ def plot_energy_resolution(
     return fig, axs, {"Mean": mean_resolution, "StD": std_resolution}
 
 
-def plot_fd_event_images(
+def plot_fd_event_image(
     stp_planeview: npt.NDArray,
     stp_strip: npt.NDArray,
     stp_plane: npt.NDArray,
-    stp_ph0_pe: npt.NDArray | None = None,
-    stp_ph1_pe: npt.NDArray | None = None,
-    has_log_scale: bool = False,
+    fill: npt.NDArray | None = None,
+    toggle_log_scale: bool = False,
+    cbar_label: str = "",
     **figure_kwargs,
 ) -> tuple[Figure, tuple[Axes, ...]]:
     """\
@@ -713,114 +742,92 @@ def plot_fd_event_images(
     stp_plane : npt.NDArray
         The `stp.plane` variable from the SNTP_BR_STD branch of SNTP files.
 
-    stp_ph0_pe : npt.NDArray
-        The `stp.ph0.pe` variable from the SNTP_BR_STD branch of SNTP files.
+    fill : npt.NDArray | None
+        Array to fill the image. Defaults to `None`. If `None`, the image will 
+        be filled with "1"s.
 
-    stp_ph1_pe : npt.NDArray
-        The `stp.ph1.pe` variable from the SNTP_BR_STD branch of SNTP files.
-
-    has_log_scale : bool
+    toggle_log_scale : bool
         Whether to use a log scale for the pixel images. Defaults to `False`.
+
+    cbar_label : str
+        Label for the colour bar. Defaults to "".
 
     Returns
     -------
     tuple[Figure, tuple[Axes, ...]]
         Matplotlib `Figure` object and a tuple of Matplotlib `Axes` object(s).
     """
-    fig, axs = fd_uv_view_layout(**figure_kwargs)
-
-    fd_w_n_planes: int = minos_numbers["FD"]["West"]["NPlanes"]
-    fd_e_n_planes: int = minos_numbers["FD"]["East"]["NPlanes"]
+    fd_s_n_planes: int = minos_numbers["FD"]["South"]["NPlanes"]
+    fd_n_n_planes: int = minos_numbers["FD"]["North"]["NPlanes"]
     fd_n_strips = minos_numbers["FD"]["NStripsPerPlane"]
 
-    has_given_pe = (stp_ph0_pe is not None) and (stp_ph1_pe is not None)
+    # (1) Create the figure and axes.
 
-    # Getting the pixel images...
-    u_west_image, u_east_image = get_fd_event_images(
+    fig, axs = fd_uv_views_layout(**figure_kwargs)
+
+    # (2) Getting the event images.
+
+    u_south_image, u_north_image = create_fd_split_image(
         plane=EPlaneView.U,
         stp_planeview=stp_planeview,
         stp_strip=stp_strip,
         stp_plane=stp_plane,
-        stp_ph0_pe=stp_ph0_pe,
-        stp_ph1_pe=stp_ph1_pe,
+        fill=[fill] if fill is not None else None,
     )
 
-    v_west_image, v_east_image = get_fd_event_images(
+    v_south_image, v_north_image = create_fd_split_image(
         plane=EPlaneView.V,
         stp_planeview=stp_planeview,
         stp_strip=stp_strip,
         stp_plane=stp_plane,
-        stp_ph0_pe=stp_ph0_pe,
-        stp_ph1_pe=stp_ph1_pe,
+        fill=[fill] if fill is not None else None,
     )
 
-    if has_log_scale:
-        u_west_image = np.log1p(u_west_image)
-        u_east_image = np.log1p(u_east_image)
-        v_west_image = np.log1p(v_west_image)
-        v_east_image = np.log1p(v_east_image)
+    if toggle_log_scale:
+        u_south_image = np.log1p(u_south_image)
+        u_north_image = np.log1p(u_north_image)
+        v_south_image = np.log1p(v_south_image)
+        v_north_image = np.log1p(v_north_image)
+
+    # (3) Plotting the images.
+
+    stacked_images = np.hstack(
+        [u_north_image, u_south_image, v_south_image, v_north_image]
+    )
 
     imshow_kwargs: dict[str, Any] = {
         "origin": "lower",
         "aspect": "auto",
-        "vmin": (
-            np.min(
-                [
-                    np.min(im)
-                    for im in [
-                        u_west_image,
-                        u_east_image,
-                        v_west_image,
-                        v_east_image,
-                    ]
-                ]
-            )
-            if has_given_pe
-            else None
-        ),
-        "vmax": (
-            np.max(
-                [
-                    np.max(im)
-                    for im in [
-                        u_west_image,
-                        u_east_image,
-                        v_west_image,
-                        v_east_image,
-                    ]
-                ]
-            )
-            if has_given_pe
-            else None
-        ),
+        "vmin": (np.min(stacked_images) if fill is not None else None),
+        "vmax": (np.max(stacked_images) if fill is not None else None),
     }
     west_extent: tuple[int, int, int, int] = (
         0,
-        fd_w_n_planes,
+        fd_s_n_planes,
         0,
         fd_n_strips,
     )
     east_extent: tuple[int, int, int, int] = (
-        fd_w_n_planes,
-        fd_w_n_planes + fd_e_n_planes,
+        fd_s_n_planes,
+        fd_s_n_planes + fd_n_n_planes,
         0,
         fd_n_strips,
     )
 
-    # Plotting the images...
-    image = axs[0].imshow(u_west_image, extent=west_extent, **imshow_kwargs)
-    axs[2].imshow(u_east_image, extent=east_extent, **imshow_kwargs)
+    image = axs[0].imshow(u_south_image, extent=west_extent, **imshow_kwargs)
+    axs[2].imshow(u_north_image, extent=east_extent, **imshow_kwargs)
 
-    axs[3].imshow(v_west_image, extent=west_extent, **imshow_kwargs)
-    axs[5].imshow(v_east_image, extent=east_extent, **imshow_kwargs)
+    axs[3].imshow(v_south_image, extent=west_extent, **imshow_kwargs)
+    axs[5].imshow(v_north_image, extent=east_extent, **imshow_kwargs)
 
-    # Adding a colourbar...
-    if has_given_pe:
+    # (4) Add the colourbar.
+
+    if fill is not None:
         colour_bar = fig.colorbar(image, ax=axs, pad=0.02, aspect=30)
         colour_bar.set_label(
-            "Log(" * has_log_scale
-            + "Photoelectrons".upper()
-            + ")" * has_log_scale
+            "log(1 + " * toggle_log_scale
+            + cbar_label.upper()
+            + ")" * toggle_log_scale
         )
 
     return fig, axs
