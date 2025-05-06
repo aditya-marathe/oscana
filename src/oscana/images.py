@@ -14,8 +14,9 @@ This module contains functions to extract the event images from the SNTP files.
 from __future__ import annotations
 
 __all__ = [
-    "get_fd_event_images",
-    "get_sparase_fd_event_images",
+    "create_fd_full_image",
+    "create_fd_split_image",
+    "image_to_sparse",
 ]
 
 import logging
@@ -34,111 +35,35 @@ _logger = logging.getLogger("Root")
 # =========================== [ Helper Functions ] =========================== #
 
 
-def _get_strip_plane_indices(
-    plane: EPlaneView,
-    stp_planeview: npt.NDArray,
-    stp_strip: npt.NDArray,
-    stp_plane: npt.NDArray,
-    stp_ph0_pe: npt.NDArray | None,
-    stp_ph1_pe: npt.NDArray | None,
-) -> tuple[
-    tuple[npt.NDArray, npt.NDArray],
-    tuple[npt.NDArray, npt.NDArray],
-    tuple[npt.NDArray, npt.NDArray],
-]:
+def image_to_sparse(image: npt.NDArray[IMAGE_DTYPE]) -> sps.csr_matrix:
     """\
-    [ Internal ] Get the strip and plane indices for the given plane view.
+    Convert a dense image to a sparse matrix.
 
     Parameters
     ----------
-    plane : EPlaneView
-        The plane view to extract the images for (either U-Z or V-Z).
-
-    stp_planeview : npt.NDArray
-        The `stp.planeview` variable from the SNTP_BR_STD branch of SNTP files.
-
-    stp_strip : npt.NDArray
-        The `stp.strip` variable from the SNTP_BR_STD branch of SNTP files.
-
-    stp_plane : npt.NDArray
-        The `stp.plane` variable from the SNTP_BR_STD branch of SNTP files.
-
-    stp_ph0_pe : npt.NDArray | None
-        The `stp.ph0.pe` variable from the SNTP_BR_STD branch of SNTP files.
-    
-    stp_ph1_pe : npt.NDArray | None
-        The `stp.ph1.pe` variable from the SNTP_BR_STD branch of SNTP files.
+    image : npt.NDArray[IMAGE_DTYPE]
+        The dense image to convert.
 
     Returns
     -------
-    tuple[
-        tuple[npt.NDArray, npt.NDArray],
-        tuple[npt.NDArray, npt.NDArray],
-        tuple[npt.NDArray, npt.NDArray],
-    ]
-        The strip and plane indices for the west and east modules. The PE values
-        for the west and east modules.
+    sps.csr_matrix
+        The sparse matrix representation of the image.
     """
-    stp_planeview = np.asarray(stp_planeview)
-    stp_strip = np.asarray(stp_strip)
-    stp_plane = np.asarray(stp_plane)
-
-    try:
-        plane_selection = stp_planeview == plane.value
-    except ValueError:
-        _error(
-            ValueError,
-            "The `stp_planeview` array should be a 1D array.",
-            _logger,
-        )
-
-    stp_strip = stp_strip[plane_selection]
-    stp_plane = stp_plane[plane_selection] - np.int64(1)
-
-    fd_w_n_planes = minos_numbers["FD"]["West"]["NPlanes"]
-
-    # Seperate the West and East modules
-
-    # Note: 'stp.plane' is 1-indexed, while 'stp.strip' is 0-indexed! So, for
-    #       West the plane number ranges from 0 to 241 and for East it ranges
-    #       from 242 to 484.
-
-    west_selection = stp_plane <= (fd_w_n_planes - 1)
-    east_selection = stp_plane > (fd_w_n_planes - 1)
-
-    strip_west = stp_strip[west_selection]
-    plane_west = stp_plane[west_selection]
-
-    strip_east = stp_strip[east_selection]
-    plane_east = stp_plane[east_selection] - fd_w_n_planes
-
-    if (stp_ph0_pe is not None) and (stp_ph1_pe is not None):
-        stp_ph1_pe = stp_ph1_pe[plane_selection][west_selection]
-        stp_ph0_pe = stp_ph0_pe[plane_selection][east_selection]
-    else:
-        stp_ph1_pe = np.ones_like(strip_west, dtype=IMAGE_DTYPE)
-        stp_ph0_pe = np.ones_like(strip_east, dtype=IMAGE_DTYPE)
-
-    return (
-        (strip_west, plane_west),
-        (strip_east, plane_east),
-        (stp_ph1_pe, stp_ph0_pe),
-    )
+    return sps.csr_matrix(image, shape=image.shape, dtype=IMAGE_DTYPE)
 
 
 # ============================== [ Functions  ] ============================== #
 
 
-def get_fd_event_images(
+def create_fd_full_image(
     plane: EPlaneView,
     stp_planeview: npt.NDArray,
     stp_strip: npt.NDArray,
     stp_plane: npt.NDArray,
-    stp_ph0_pe: npt.NDArray | None = None,
-    stp_ph1_pe: npt.NDArray | None = None,
-) -> tuple[npt.NDArray[IMAGE_DTYPE], npt.NDArray[IMAGE_DTYPE]]:
+    fill: list[npt.NDArray] | None = None,
+) -> npt.NDArray[IMAGE_DTYPE]:
     """\
-    Get the west and east FD event images for the given plane.
+    Get the FD event image for the given plane.
 
     Parameters
     ----------
@@ -154,58 +79,101 @@ def get_fd_event_images(
     stp_plane : npt.NDArray
         The `stp.plane` variable from the SNTP_BR_STD branch of SNTP files.
 
-    stp_ph0_pe : npt.NDArray | None
-        The `stp.ph0.pe` variable from the SNTP_BR_STD branch of SNTP files.
-        Defaults to `None`.
-
-    stp_ph1_pe : npt.NDArray | None
-        The `stp.ph1.pe` variable from the SNTP_BR_STD branch of SNTP files.
-        Defaults to `None`.
+    fill : list[npt.NDArray] | None
+        Array(s) to fill the image. Defaults to `None`. If `None`, the image
+        will be filled with "1"s.
 
     Returns
     -------
-    tuple[npt.NDArray, npt.NDArray]
-        The west and east FD event images.
+    npt.NDArray[IMAGE_DTYPE]
+        The FD event image for the given plane.
     """
-    fd_w_n_planes = minos_numbers["FD"]["West"]["NPlanes"]
-    fd_e_n_planes = minos_numbers["FD"]["East"]["NPlanes"]
+    # (1) Run checks on the user input.
+
+    # TODO: Do these checks slow this code down significantly?
+    # stp_planeview = np.asarray(stp_planeview, dtype=np.uint16)
+    # stp_strip = np.asarray(stp_strip, dtype=np.uint16)
+    # stp_plane = np.asarray(stp_plane, dtype=np.uint16)
+
+    if not (stp_planeview.shape == stp_strip.shape == stp_plane.shape):
+        _error(
+            ValueError,
+            "The `stp.planeview`, `stp.strip` and `stp.plane` arrays should "
+            "have the same shape!",
+            _logger,
+        )
+
+    if fill is None:
+        fill = [np.ones(shape=stp_planeview.shape, dtype=IMAGE_DTYPE)]
+
+    fd_s_n_planes = minos_numbers["FD"]["South"]["NPlanes"]
+    fd_n_n_planes = minos_numbers["FD"]["North"]["NPlanes"]
+    fd_n_planes = fd_s_n_planes + fd_n_n_planes
     fd_n_strips = minos_numbers["FD"]["NStripsPerPlane"]
 
-    west_indices, east_indices, digit_values = _get_strip_plane_indices(
-        plane=plane,
-        stp_planeview=stp_planeview,
-        stp_strip=stp_strip,
-        stp_plane=stp_plane,
-        stp_ph0_pe=stp_ph0_pe,
-        stp_ph1_pe=stp_ph1_pe,
+    # (2) Get data for the selected plane.
+
+    try:
+        plane_selector = stp_planeview == plane.value
+    except ValueError:
+        _error(
+            ValueError,
+            "The `stp_planeview` array should be a 1D array!",
+            _logger,
+        )
+
+    # Note: 'stp.plane' is 1-indexed, while 'stp.strip' is 0-indexed!
+
+    stp_strip = stp_strip[plane_selector]
+    stp_plane = stp_plane[plane_selector] - np.array(1, dtype=stp_plane.dtype)
+
+    # (3) Fill the image.
+
+    # Note: Shape of the image should be (HEIGHT, WIDTH, CHANNELS).
+
+    image = np.zeros(
+        shape=(fd_n_strips, fd_n_planes, len(fill)), dtype=IMAGE_DTYPE
     )
 
-    # Fill the matrices
-    image_west = np.zeros(shape=(fd_n_strips, fd_w_n_planes), dtype=IMAGE_DTYPE)
-    image_east = np.zeros(shape=(fd_n_strips, fd_e_n_planes), dtype=IMAGE_DTYPE)
+    for i, fill_value in enumerate(fill):
+        # (3.1) Run checks on the fill value.
 
-    image_west[west_indices] = digit_values[0]
-    image_east[east_indices] = digit_values[1]
+        # TODO: Do these checks slow this code down significantly?
+        # fill_value = np.asarray(fill_value, dtype=IMAGE_DTYPE)
 
-    return image_west, image_east
+        fill_value = fill_value[plane_selector]
+
+        if fill_value.shape != stp_strip.shape:
+            _error(
+                ValueError,
+                f"The `fill` array #{i + 1} should have the same shape as "
+                "'stp.strip', 'stp.plane' and 'stp.planeview'!",
+                _logger,
+            )
+
+        # (3.2) Fill the image.
+
+        image[stp_strip, stp_plane, i] = fill_value
+
+    return image
 
 
-def get_sparase_fd_event_images(
+def create_fd_split_image(
     plane: EPlaneView,
     stp_planeview: npt.NDArray,
     stp_strip: npt.NDArray,
     stp_plane: npt.NDArray,
-    stp_ph0_pe: npt.NDArray | None = None,
-    stp_ph1_pe: npt.NDArray | None = None,
-) -> tuple[sps.csr_matrix, sps.csr_matrix]:
+    fill: list[npt.NDArray] | None = None,
+) -> tuple[npt.NDArray[IMAGE_DTYPE], npt.NDArray[IMAGE_DTYPE]]:
     """\
-    Get the west and east FD event sparse images for the given plane.
+    Get the FD event image, split into the South and North submodules, for the 
+    given plane.
 
     Parameters
     ----------
     plane : EPlaneView
         The plane view to extract the images for (either U-Z or V-Z).
-    
+
     stp_planeview : npt.NDArray
         The `stp.planeview` variable from the SNTP_BR_STD branch of SNTP files.
 
@@ -215,26 +183,28 @@ def get_sparase_fd_event_images(
     stp_plane : npt.NDArray
         The `stp.plane` variable from the SNTP_BR_STD branch of SNTP files.
 
-    stp_ph0_pe : npt.NDArray | None
-        The `stp.ph0.pe` variable from the SNTP_BR_STD branch of SNTP files.
-        Defaults to `None`.
-
-    stp_ph1_pe : npt.NDArray | None
-        The `stp.ph1.pe` variable from the SNTP_BR_STD branch of SNTP files.
-        Defaults to `None`.
+    fill : list[npt.NDArray] | None
+        Array(s) to fill the image. Defaults to `None`. If `None`, the image
+        will be filled with "1"s.
 
     Returns
     -------
-    tuple[sps.csr_matrix, sps.csr_matrix]
-        The west and east FD event sparse event images.
+    tuple[npt.NDArray[IMAGE_DTYPE], npt.NDArray[IMAGE_DTYPE]]
+        The FD event image for the given plane, split into the South and North
+        submodules.
     """
-    image_west, image_east = get_fd_event_images(
+    # (1) Get the full image.
+
+    full_image = create_fd_full_image(
         plane=plane,
         stp_planeview=stp_planeview,
         stp_strip=stp_strip,
         stp_plane=stp_plane,
-        stp_ph0_pe=stp_ph0_pe,
-        stp_ph1_pe=stp_ph1_pe,
+        fill=fill,
     )
 
-    return sps.csr_matrix(image_west), sps.csr_matrix(image_east)
+    # (2) Split the image into the South and North submodules.
+
+    fd_s_n_planes = minos_numbers["FD"]["South"]["NPlanes"]
+
+    return full_image[:, :fd_s_n_planes, :], full_image[:, fd_s_n_planes:, :]
