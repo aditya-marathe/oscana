@@ -15,7 +15,7 @@ __all__ = ["init_root_logger"]
 
 from typing import NoReturn
 
-import platform, json
+import platform, json, warnings
 from importlib import resources
 import logging, logging.config
 from pathlib import Path
@@ -30,6 +30,48 @@ from pathlib import Path
 
 with resources.path("oscana", "") as _path:
     CONFIG_PATH = Path(_path).parent.parent / "res" / "configs"
+
+
+# ========================== [ Warning Formatting ] ========================== #
+
+
+def _warn_formatting(
+    message: str,
+    category: type[Warning],
+    filename: str,
+    lineno: int,
+    file: str | None = None,
+    line: int | None = None,
+) -> str:
+    """\
+    [ Internal ] Formats the warnings in a specific way.
+    
+    Parameters
+    ----------
+    message : str
+        The warning message.
+        
+    category : Warning
+        The warning category.
+
+    filename : str
+        The filename where the warning was raised.
+
+    lineno : int
+        The line number where the warning was raised.
+
+    file : str | None
+        The file where the warning was raised.
+
+    line : int | None
+        The line number where the warning was raised.
+
+    Returns
+    -------
+    str
+        The formatted warning message.
+    """
+    return f"{category.__name__}: {message}\n"
 
 
 # ============================ [ Implementation ] ============================ #
@@ -92,7 +134,7 @@ def init_root_logger(
     class OscanaFatalError(Exception):
         pass
 
-    # Actual function implementation starts here...
+    # (1) Get the logging configuration file.
 
     if config_file is None:
         config_file_resolved = (CONFIG_PATH / "logging.json").resolve()
@@ -111,7 +153,7 @@ def init_root_logger(
             "Invaild JSON format in logging configuration file."
         )
 
-    # Edit the directory of the log files.
+    # (2) Edit the directory of the log files.
 
     # TODO: This means that there is little flexibility in the configuration
     #       dictionary... Not sure how to fix this yet.
@@ -130,11 +172,19 @@ def init_root_logger(
 
     logging.config.dictConfig(config=config_dict)
 
+    # (3) Set the warning format.
+
+    warnings.formatwarning = _warn_formatting
+
+    # (4) Log the initialisation message.
+
     _is_root_logger_initialised = True
     logging.getLogger("Root").info("Logger initialised.")
 
 
-def _error(error: type, message: str, logger: logging.Logger) -> NoReturn:
+def _error(
+    error: type[Exception], message: str, logger: logging.Logger
+) -> NoReturn:
     """\
     [ Internal ]
 
@@ -149,3 +199,20 @@ def _error(error: type, message: str, logger: logging.Logger) -> NoReturn:
     """
     logger.error(f"{error.__name__}: {message}")
     raise error(message)
+
+
+def _warn(warning: type[Warning], message: str, logger: logging.Logger) -> None:
+    """\
+    [ Internal ]
+
+    Raises a warning and logs the message.
+
+    Parameters
+    ----------
+    warning : type
+        The warning to raise.
+    message : str
+        The custom warning message.
+    """
+    logger.warning(f"{warning.__name__}: {message}")
+    warnings.warn(message, category=warning)
