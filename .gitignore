@@ -109,3 +109,6 @@ tests/
 # Temporary files
 temp.py
 temp.ipynb
+
+# Log Files
+*.log
