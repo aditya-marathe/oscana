@@ -24,7 +24,11 @@ __all__ = [
     "SNTP_BR_BDL",
     "SNTP_BR_FIT",
     # SNTP Variable Collections
-    "IMAGE_VARIABLES",
+    "IMAGE_BASIC_VARIABLES",
+    "IMAGE_PE_VARIABLES",
+    "IMAGE_SIGCOR_VARIABLES",
+    "IMAGE_TIME_VARIABLES",
+    "IMAGE_ALL_VARIABLES",
     # Enums
     "EIAction",
     "EIResonance",
@@ -86,13 +90,33 @@ SNTP_VR_EVT_UTC: Final[str] = (
 
 # ====================== [ SNTP Variable Collections  ] ====================== #
 
-IMAGE_VARIABLES: Final[list[str]] = [
-    f"{SNTP_BR_STD}/stp.planeview",
-    f"{SNTP_BR_STD}/stp.strip",
-    f"{SNTP_BR_STD}/stp.plane",
-    f"{SNTP_BR_STD}/stp.ph0.pe",
-    f"{SNTP_BR_STD}/stp.ph1.pe",
+IMAGE_BASIC_VARIABLES: Final[list[str]] = [
+    f"{SNTP_BR_STD}/stp.planeview",  # Plane view
+    f"{SNTP_BR_STD}/stp.strip",  # Strip number
+    f"{SNTP_BR_STD}/stp.plane",  # Plane number
 ]
+
+IMAGE_PE_VARIABLES: Final[list[str]] = [
+    f"{SNTP_BR_STD}/stp.ph0.pe",  # Photoelectrons (East)
+    f"{SNTP_BR_STD}/stp.ph1.pe",  # Photoelectrons (West)
+]
+
+IMAGE_SIGCOR_VARIABLES: Final[list[str]] = [
+    f"{SNTP_BR_STD}/stp.ph0.sigcor",  # Normalised strip response (East)
+    f"{SNTP_BR_STD}/stp.ph1.sigcor",  # Normalised strip response (West)
+]
+
+IMAGE_TIME_VARIABLES: Final[list[str]] = [
+    f"{SNTP_BR_STD}/stp.time0",  # Charge weighted mean time [s] (East)
+    f"{SNTP_BR_STD}/stp.time1",  # Charge weighted mean time [s] (West)
+]
+
+IMAGE_ALL_VARIABLES: Final[list[str]] = (
+    IMAGE_BASIC_VARIABLES
+    + IMAGE_PE_VARIABLES
+    + IMAGE_SIGCOR_VARIABLES
+    + IMAGE_TIME_VARIABLES
+)
 
 # ================================ [ Enums  ] ================================ #
 
