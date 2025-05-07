@@ -46,6 +46,16 @@ class DataHandler:
 
     """
 
+    __slots__ = [
+        "_data_io",
+        "_variables",
+        "_has_cuts_table",
+        "_t_metadata",
+        "_f_metadata",
+        "_data_table",
+        "_cuts_table",
+    ]
+
     def __init__(
         self,
         variables: list[str],
@@ -66,7 +76,8 @@ class DataHandler:
         make_cut_bool_table : bool, optional
             Whether to make a cuts table, by default False.
         """
-        # Get the Data IO plugin.
+        # (1) Get the Data IO plugin.
+
         data_io_plugin: type[DataIOStrategy] | None = plugins.get(data_io, None)
 
         if data_io_plugin is None:
@@ -75,6 +86,9 @@ class DataHandler:
                 (f"Data IO strategy '{data_io}' not found in the plugins."),
                 logger,
             )
+
+        # (2) Initialise the instance variables.
+
         self._data_io: DataIOStrategy = data_io_plugin(parent=self)
 
         self._variables = variables
@@ -92,12 +106,14 @@ class DataHandler:
         """
         info = self.io._get_strategy_info()
 
+        unknown: str = "???"
+
         print("Data IO\n" + "-" * 7)
         print("\t- IO Strategy Class : " + str(self.io))
-        print("\t- SNTP Loader       : " + info.get("SNTP Loader", "???"))
-        print("\t- uDST Loader       : " + info.get("uDST Loader", "???"))
-        print("\t- HDF5 Loader       : " + info.get("HDF5 Loader", "???"))
-        print("\t- HDF5 Writer       : " + info.get("HDF5 Writer", "???"))
+        print("\t- SNTP Loader       : " + info.get("SNTP Loader", unknown))
+        print("\t- uDST Loader       : " + info.get("uDST Loader", unknown))
+        print("\t- HDF5 Loader       : " + info.get("HDF5 Loader", unknown))
+        print("\t- HDF5 Writer       : " + info.get("HDF5 Writer", unknown))
         print("\nSettings\n" + "-" * 8)
         print(
             "\t- Cuts Table : "
