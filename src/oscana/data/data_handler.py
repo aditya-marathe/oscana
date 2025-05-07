@@ -19,7 +19,8 @@ import logging
 from .io_base import DataIOStrategy
 from .t_metadata import TransformMetadata
 from .f_metadata import FileMetadata
-from ..utils import import_plugins, OscanaError, _error
+from ..logger import _error
+from ..utils import import_plugins, OscanaError
 
 # =============================== [ Logging  ] =============================== #
 
@@ -39,6 +40,12 @@ T = TypeVar("T", bound=DataIOStrategy)
 
 
 class DataHandler:
+    """\
+    Data Handler
+    ------------
+
+    """
+
     def __init__(
         self,
         variables: list[str],
@@ -46,7 +53,7 @@ class DataHandler:
         make_cut_bool_table: bool = False,
     ) -> None:
         """\
-        Data Handler.
+        Initialise a `DataHandler` object.
 
         Parameters
         ----------
@@ -60,7 +67,8 @@ class DataHandler:
             Whether to make a cuts table, by default False.
         """
         # Get the Data IO plugin.
-        data_io_plugin: type[DataIOStrategy] = plugins.get(data_io, None)
+        data_io_plugin: type[DataIOStrategy] | None = plugins.get(data_io, None)
+
         if data_io_plugin is None:
             _error(
                 OscanaError,

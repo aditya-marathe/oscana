@@ -38,7 +38,8 @@ from .enumerations import (
     EHornCurrent,
     EFileType,
 )
-from ..utils import OscanaError, _error, _convert_from_utc
+from ..logger import _error
+from ..utils import OscanaError, _convert_from_utc
 from ..constants import SNTP_BR_STD, SNTP_VR_RUN, SNTP_VR_EVT_UTC
 
 

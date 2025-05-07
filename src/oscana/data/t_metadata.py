@@ -24,7 +24,7 @@ __all__ = []
 import logging
 from dataclasses import dataclass, field
 
-from ..utils import _error
+from ..logger import _error
 
 # =============================== [ Logging  ] =============================== #
 

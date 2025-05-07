@@ -20,7 +20,7 @@ from abc import ABC, abstractmethod
 
 from .f_metadata import FileMetadata
 from .t_metadata import TransformMetadata
-from ..utils import _error
+from ..logger import _error
 
 if TYPE_CHECKING:
     from .data_handler import DataHandler

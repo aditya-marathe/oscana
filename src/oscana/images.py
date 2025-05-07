@@ -25,7 +25,8 @@ import numpy as np
 import numpy.typing as npt
 import scipy.sparse as sps
 
-from .utils import minos_numbers, _error
+from .logger import _error
+from .utils import minos_numbers
 from .constants import IMAGE_DTYPE, EPlaneView
 
 # ================================ [ Logger ] ================================ #
