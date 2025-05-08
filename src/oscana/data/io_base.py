@@ -12,7 +12,7 @@ from __future__ import annotations
 
 __all__ = []
 
-from typing import TYPE_CHECKING, TypeAlias, TypeVar, Callable, Generic
+from typing import TYPE_CHECKING, TypeAlias, TypeVar, Protocol, Generic
 
 import logging
 from pathlib import Path
@@ -27,23 +27,49 @@ if TYPE_CHECKING:
 
 # ============================= [ Type Aliases ] ============================= #
 
-T = TypeVar("T")  # Generic type for "DataFrame"-like structures.
+# Generic types for "DataFrame"-like structures.
+TCov = TypeVar("TCov", covariant=True)
+TCon = TypeVar("TCon", contravariant=True)
 
-# Note: In Python 3.12, you would want to do this instead:
-#       ```python
-#       type LoaderFuncType[T] = Callable[...]
-#       ```
-#       But, alas, we are stuck with stinky & old Python 3.10 for now.
 
-LoaderFuncType: TypeAlias = Callable[
-    [list[str], list[str]],
-    tuple[T, list[FileMetadata], TransformMetadata | None],
-]
-WriterFuncType: TypeAlias = Callable[
-    [T, list[FileMetadata], TransformMetadata, str | Path], None
-]
+class LoaderFuncType(Protocol, Generic[TCov]):
+    """\
+    [ Internal ]
+
+    Loader Function Type
+    --------------------
+
+    This a Protocol used for type hinting the loader functions used in
+    `DataIOStrategy` sub-classes.
+    """
+
+    def __call__(
+        self, variables: list[str], files: list[str]
+    ) -> tuple[TCov, list[FileMetadata], TransformMetadata | None]: ...
+
+
+class WriterFuncType(Protocol, Generic[TCon]):
+    """\
+    [ Internal ]
+
+    Writer Function Type
+    --------------------
+
+    This a Protocol used for type hinting the writer functions used in
+    `DataIOStrategy` sub-classes.
+    """
+
+    def __call__(
+        self,
+        data: TCon,
+        file_metadata: list[FileMetadata],
+        transform_metadata: TransformMetadata,
+        file: str | Path,
+    ) -> None: ...
+
+
 LoadedDataType: TypeAlias = tuple[
-    T, list[FileMetadata], TransformMetadata | None
+    TCov, list[FileMetadata], TransformMetadata | None
 ]
 
 # =============================== [ Logging  ] =============================== #
@@ -89,24 +115,24 @@ def _get_non_cache_files(cache: list[str], files: list[str]) -> list[str]:
 # =========================== [ Data IO Strategy ] =========================== #
 
 
-class DataIOStrategy(ABC, Generic[T]):  # Can't use the cool 3.12 syntax :(
+class DataIOStrategy(ABC, Generic[TCov]):  # Can't use the cool 3.12 syntax :(
 
-    _sntp_loader: LoaderFuncType[T]
-    _udst_loader: LoaderFuncType[T]
-    _hdf5_loader: LoaderFuncType[T]
+    _sntp_loader: LoaderFuncType[TCov]
+    _udst_loader: LoaderFuncType[TCov]
+    _hdf5_loader: LoaderFuncType[TCov]
 
-    _hdf5_writer: WriterFuncType[T]
+    _hdf5_writer: WriterFuncType[TCov]
 
     def __init__(self, parent: DataHandler) -> None:
         self._parent: DataHandler = parent
         self._cache: list[str] = []
 
     @abstractmethod
-    def _init_data_table(self) -> T:
+    def _init_data_table(self) -> TCov:
         pass
 
     @abstractmethod
-    def _init_cuts_table(self) -> T:
+    def _init_cuts_table(self) -> TCov:
         pass
 
     def _get_strategy_info(self) -> dict[str, str]:
@@ -213,7 +239,7 @@ class DataIOStrategy(ABC, Generic[T]):  # Can't use the cool 3.12 syntax :(
 
     def __str__(self) -> str:
         return (
-            f"Oscana.{self.__class__.__name__}("
+            f"oscana.{self.__class__.__name__}("
             f"parent={self._parent.__class__.__name__})"
         )
 

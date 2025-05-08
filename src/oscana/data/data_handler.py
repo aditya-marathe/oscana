@@ -12,7 +12,7 @@ from __future__ import annotations
 
 __all__ = ["DataHandler"]
 
-from typing import TypeVar, Any
+from typing import TypeVar, Any, Generic, cast
 
 import logging
 
@@ -36,10 +36,10 @@ plugins = import_plugins(file=__file__)
 # ============================= [ Data Handler ] ============================= #
 
 
-T = TypeVar("T", bound=DataIOStrategy)
+T = TypeVar("T")
 
 
-class DataHandler:
+class DataHandler(Generic[T]):
     """\
     Data Handler
     ------------
@@ -78,7 +78,9 @@ class DataHandler:
         """
         # (1) Get the Data IO plugin.
 
-        data_io_plugin: type[DataIOStrategy] | None = plugins.get(data_io, None)
+        data_io_plugin: type[DataIOStrategy[T]] | None = plugins.get(
+            data_io, None
+        )
 
         if data_io_plugin is None:
             _error(
@@ -89,7 +91,7 @@ class DataHandler:
 
         # (2) Initialise the instance variables.
 
-        self._data_io: DataIOStrategy = data_io_plugin(parent=self)
+        self._data_io: DataIOStrategy[T] = data_io_plugin(parent=self)
 
         self._variables = variables
         self._has_cuts_table = bool(make_cut_bool_table)  # Just to be sure.
@@ -97,8 +99,8 @@ class DataHandler:
         self._t_metadata = TransformMetadata()
         self._f_metadata: list[FileMetadata] = []
 
-        self._data_table = self.io._init_data_table()
-        self._cuts_table = self.io._init_cuts_table()
+        self._data_table: T = self.io._init_data_table()
+        self._cuts_table: T = self.io._init_cuts_table()
 
     def print_handler_info(self) -> None:
         """\
@@ -145,11 +147,11 @@ class DataHandler:
             print("\t[ No plugins ]")
 
     @property
-    def data(self) -> Any:
+    def data(self) -> T:
         return self._data_table
 
     @property
-    def io(self) -> DataIOStrategy:
+    def io(self) -> DataIOStrategy[T]:
         return self._data_io
 
     @property
@@ -158,7 +160,7 @@ class DataHandler:
 
     def __str__(self) -> str:
         return (
-            f"Oscana.{self.__class__.__name__}("
+            f"oscana.{self.__class__.__name__}("
             f"n_variables={len(self._variables)}, "
             f"n_transforms={len(self._t_metadata.transforms)}, "
             f"n_cuts={len(self._t_metadata.cuts)}, "
