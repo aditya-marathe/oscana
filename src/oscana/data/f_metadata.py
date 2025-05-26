@@ -260,38 +260,55 @@ class FileMetadata:
     ----------
     file_name: str
         Name of the file (e.g., file.root).
+
     file_format: EFileFormat
         Format of the file.
+
     file_type: EFileType
         Type of the file (e.g. Data / MC).
+
     experiment: EExperiment
         Experiment name.
+
     detector: EDetector
         Detector name.
+
     interaction: EDaikonIntRegion
         Interaction region.
+
     flavour: EDaikonFlavour
         Flavour of the beam.
+
     mag_field: EDaikonMagField
         Magnetic field.
+
     horn_pos: EHornPosition
         Horn position.
+
     tgt_z_shift: int
         Target Z shift.
+
     current: int
         Current in the horn.
+
     run_number: int
         Run number.
+
     mc_version: tuple[EMCVersion, int]
         MC version (Vegetable) and version number.
+
     reco_version: tuple[ERecoVersion, int]
         Reconstruction version (Tree) and version number.
+
     start_time: datetime
         Start time in the file.
+
     end_time: datetime
         End time in the file.
+
     n_records: int
         Total number of records in the file.
+
     create_time: datetime
         Time when the metadata was created. Defaults to the current time.
     """
@@ -321,8 +338,97 @@ class FileMetadata:
 
     create_time: datetime = datetime.now()
 
+    def to_dict(self) -> dict[str, Any]:
+        """\
+        Convert the metadata to a dictionary.
+
+        Returns
+        -------
+        dict[str, Any]
+            Dictionary representation of the metadata.
+        """
+        return {
+            "file_name": self.file_name,
+            "file_format": self.file_format.value,
+            "file_type": self.file_type.value,
+            "experiment": self.experiment.value,
+            "detector": self.detector.value,
+            "interaction": self.interaction.value,
+            "flavour": self.flavour.value,
+            "mag_field": self.mag_field.value,
+            "horn_pos": self.horn_pos.value,
+            "tgt_z_shift": self.tgt_z_shift,
+            "current_sign": self.current_sign.value,
+            "current": self.current,
+            "run_number": self.run_number,
+            "mc_version": [self.mc_version[0].value, self.mc_version[1]],
+            "reco_version": [self.reco_version[0].value, self.reco_version[1]],
+            "start_time": self.start_time.isoformat(),
+            "end_time": self.end_time.isoformat(),
+            "n_records": self.n_records,
+            "create_time": self.create_time.isoformat(),
+        }
+
+    @staticmethod
+    def from_dict(dict: dict[str, Any]) -> FileMetadata:
+        """\
+        Create a new instance of `FileMetadata` from a dictionary.
+
+        Parameters
+        ----------
+        dict: dict[str, Any]
+            Dictionary containing the metadata.
+
+        Returns
+        -------
+        Self
+            New instance of `FileMetadata`.
+        """
+        return FileMetadata(
+            file_name=dict["file_name"],
+            file_format=EFileFormat(dict["file_format"]),
+            file_type=EFileType(dict["file_type"]),
+            experiment=EExperiment(dict["experiment"]),
+            detector=EDetector(dict["detector"]),
+            interaction=EDaikonIntRegion(dict["interaction"]),
+            flavour=EDaikonFlavour(dict["flavour"]),
+            mag_field=EDaikonMagField(dict["mag_field"]),
+            horn_pos=EHornPosition(dict["horn_pos"]),
+            tgt_z_shift=dict["tgt_z_shift"],
+            current_sign=EHornCurrent(dict["current_sign"]),
+            current=dict["current"],
+            run_number=dict["run_number"],
+            mc_version=(
+                EMCVersion(dict["mc_version"][0]),
+                dict["mc_version"][1],
+            ),
+            reco_version=(
+                ERecoVersion(dict["reco_version"][0]),
+                dict["reco_version"][1],
+            ),
+            start_time=datetime.fromisoformat(dict["start_time"]),
+            end_time=datetime.fromisoformat(dict["end_time"]),
+            n_records=dict["n_records"],
+        )
+
     @staticmethod
     def from_sntp(file_name: str, file: Any) -> FileMetadata:
+        """\
+        Create a new instance of `FileMetadata` from a SNTP file.
+
+        Parameters
+        ----------
+        file_name: str
+            Name of the file (e.g., file.sntp).
+
+        file: Any
+            The file object (e.g., opened with Uproot).
+
+        Returns
+        -------
+        Self
+            New instance of `FileMetadata`.
+        """
         daikon = from_daikon_sntp(file_name=file_name, file=file)
         if daikon is not None:
             return daikon
@@ -337,6 +443,9 @@ class FileMetadata:
         )
 
     def print(self) -> None:
+        """\
+        Print the metadata of the file in a human-readable format.
+        """
         print(
             _sumamry_text.format(
                 self.file_name,
@@ -379,8 +488,7 @@ class FileMetadata:
             (self.file_type == value.file_type)
             and (self.experiment == value.experiment)
             and (self.detector == value.detector)
-            # Allow different interaction regions in the same file.
-            # and (self.interaction == value.interaction)
+            and (self.interaction == value.interaction)
             and (self.flavour == value.flavour)
             and (self.mag_field == value.mag_field)
             and (self.horn_pos == value.horn_pos)
@@ -398,7 +506,7 @@ class FileMetadata:
         return not self.__eq__(value)
 
     def __str__(self) -> str:
-        return f"Oscana.{self.__class__.__name__}(file='{self.file_name}')"
+        return f"oscana.{self.__class__.__name__}(file='{self.file_name}')"
 
     def __repr__(self) -> str:
         return str(self)
