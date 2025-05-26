@@ -32,6 +32,9 @@ with resources.path("oscana", "") as _path:
     CONFIG_PATH = Path(_path).parent.parent / "res" / "configs"
 
 
+_STACK_LEVEL: int = 3
+
+
 # ========================== [ Warning Formatting ] ========================== #
 
 
@@ -197,7 +200,7 @@ def _error(
     message : str
         The custom error message.
     """
-    logger.error(f"{error.__name__}: {message}")
+    logger.error(f"{error.__name__}: {message}", stacklevel=_STACK_LEVEL)
     raise error(message)
 
 
@@ -214,5 +217,5 @@ def _warn(warning: type[Warning], message: str, logger: logging.Logger) -> None:
     message : str
         The custom warning message.
     """
-    logger.warning(f"{warning.__name__}: {message}")
+    logger.warning(f"{warning.__name__}: {message}", stacklevel=_STACK_LEVEL)
     warnings.warn(message, category=warning)
