@@ -24,6 +24,7 @@ __all__ = [
     "SNTP_BR_BDL",
     "SNTP_BR_FIT",
     # SNTP Variable Collections
+    "HEADER_VARIABLES",
     "IMAGE_BASIC_VARIABLES",
     "IMAGE_PE_VARIABLES",
     "IMAGE_SIGCOR_VARIABLES",
@@ -33,6 +34,7 @@ __all__ = [
     "EIAction",
     "EIResonance",
     "EIdHEP",
+    "EInteraction",
     "EPlaneView",
 ]
 
@@ -90,6 +92,13 @@ SNTP_VR_EVT_UTC: Final[str] = (
 
 # ====================== [ SNTP Variable Collections  ] ====================== #
 
+HEADER_VARIABLES: Final[list[str]] = [
+    f"{SNTP_BR_STD}/fHeader.fRun",  # Run number
+    f"{SNTP_BR_STD}/fHeader.fSubRun",  # Subrun number
+    f"{SNTP_BR_STD}/fHeader.fSnarl",  # Snarl number
+    f"{SNTP_BR_STD}/fHeader.fEvent",  # Event number
+]
+
 IMAGE_BASIC_VARIABLES: Final[list[str]] = [
     f"{SNTP_BR_STD}/stp.planeview",  # Plane view
     f"{SNTP_BR_STD}/stp.strip",  # Strip number
@@ -130,7 +139,7 @@ class _BaseEnum(Enum):
         return self.name.replace("_", " ").title()
 
     def __repr__(self) -> str:
-        return f"Oscana.{self.__class__.__name__}.{self.name}"
+        return f"oscana.{self.__class__.__name__}.{self.name}"
 
 
 class EIAction(_BaseEnum):
@@ -180,6 +189,38 @@ class EIdHEP(_BaseEnum):
 
     @classmethod
     def _missing_(cls, value: object) -> EIdHEP:
+        return cls(cls.UNKNOWN)
+
+
+class EInteraction(_BaseEnum):
+    """\
+    Interaction Codes
+
+    Note
+    ----
+    The interaction codes are calculated by multiplying the "mc.iaction" and
+    "stdhep.IdHEP" columns in the data. The "mc.iaction" is the true interaction 
+     (either CC or NC) and the "stdhep.IdHEP" column is the interacting neutrino
+     (NuE, NuMu, NuTau, or their anti-particles).
+    """
+
+    # CC Interactions
+    NUECC = EIdHEP.ELECTRON_NU.value
+    NUMUCC = EIdHEP.MUON_NU.value
+    NUTAUCC = EIdHEP.TAU_NU.value
+
+    ANTINUECC = -EIdHEP.ELECTRON_NU.value
+    ANTINUMUCC = -EIdHEP.MUON_NU.value
+    ANTINUTAUCC = -EIdHEP.TAU_NU.value
+
+    # NC Interactions
+    NC = 0
+
+    # Unknown
+    UNKNOWN = -1
+
+    @classmethod
+    def _missing_(cls, value: object) -> EInteraction:
         return cls(cls.UNKNOWN)
 
 
