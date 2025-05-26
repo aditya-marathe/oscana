@@ -12,19 +12,20 @@ from __future__ import annotations
 
 __all__ = ["DataHandler"]
 
-from typing import TypeVar, Any, Generic, cast
+from typing import TypeVar, Generic
 
 import logging
 
+from ..logger import _error, _warn
 from .io_base import DataIOStrategy
 from .t_metadata import TransformMetadata
 from .f_metadata import FileMetadata
-from ..logger import _error
+from .transform import TransformBase
 from ..utils import import_plugins, OscanaError
 
 # =============================== [ Logging  ] =============================== #
 
-logger = logging.getLogger("Root")
+_logger = logging.getLogger("Root")
 
 # ============================= [ Load Plugins ] ============================= #
 
@@ -86,7 +87,7 @@ class DataHandler(Generic[T]):
             _error(
                 OscanaError,
                 (f"Data IO strategy '{data_io}' not found in the plugins."),
-                logger,
+                _logger,
             )
 
         # (2) Initialise the instance variables.
@@ -101,6 +102,49 @@ class DataHandler(Generic[T]):
 
         self._data_table: T = self.io._init_data_table()
         self._cuts_table: T = self.io._init_cuts_table()
+
+    def apply_transforms(self, transforms: list[TransformBase]) -> None:
+        """\
+        Apply the transforms to the data.
+        
+        Parameters
+        ----------
+        transforms : list[TransformBase]
+            List of transforms to apply.
+        """
+        n_errors: int = 0
+
+        for i, transform in enumerate(transforms):
+            len_before = self.io.get_data_length()
+
+            try:
+                self._data_table, self._cuts_table = transform(dh=self)
+            except Exception as e:
+                n_errors += 1
+
+                _warn(
+                    RuntimeWarning,
+                    f"Error while applying transform `{transform}`. "
+                    f"{e.__class__.__name__}: {e}",
+                    _logger,
+                )
+
+            else:
+                self._t_metadata._add_transform(transform=transform)
+
+            _logger.info(
+                f"({i + 1}/{len(transforms)}) Applied the transform "
+                f"`{transform}` to the data with {n_errors} errors. "
+                f"Number of Rows {len_before} -> {self.io.get_data_length()}."
+            )
+
+        if n_errors > 0:
+            _error(
+                OscanaError,
+                f"Failed to apply {n_errors} transforms to the data. (See above"
+                " warnings.)",
+                _logger,
+            )
 
     def print_handler_info(self) -> None:
         """\
@@ -163,7 +207,6 @@ class DataHandler(Generic[T]):
             f"oscana.{self.__class__.__name__}("
             f"n_variables={len(self._variables)}, "
             f"n_transforms={len(self._t_metadata.transforms)}, "
-            f"n_cuts={len(self._t_metadata.cuts)}, "
             f"n_files={len(self._f_metadata)})"
         )
 
