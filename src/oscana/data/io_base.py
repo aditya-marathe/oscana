@@ -74,7 +74,7 @@ LoadedDataType: TypeAlias = tuple[
 
 # =============================== [ Logging  ] =============================== #
 
-logger = logging.getLogger("Root")
+_logger = logging.getLogger("Root")
 
 # =========================== [ Helper Functions ] =========================== #
 
@@ -102,7 +102,7 @@ def _get_non_cache_files(cache: list[str], files: list[str]) -> list[str]:
 
     for file in files:
         if file in cache:
-            logger.info(f"Skipping '{file}' as it is already in the cache.")
+            _logger.info(f"Skipping '{file}' as it is already in the cache.")
             continue
 
         non_cache_files.append(file)
@@ -129,10 +129,74 @@ class DataIOStrategy(ABC, Generic[TCov]):  # Can't use the cool 3.12 syntax :(
 
     @abstractmethod
     def _init_data_table(self) -> TCov:
+        """\
+        [ Internal ] Initialise the data table.
+
+        Returns
+        -------
+        DataFrame
+            The data table.
+        """
         pass
 
     @abstractmethod
     def _init_cuts_table(self) -> TCov:
+        """\
+        [ Internal ] Initialise the cuts table.
+        
+        Returns
+        -------
+        DataFrame
+            The cuts table.
+        """
+        pass
+
+    @abstractmethod
+    def _from_sntp(self, files: list[str]) -> None:
+        """\
+        [ Internal ] Import data from SNTP ROOT files.
+
+        Parameters
+        ----------
+        files : list[str]
+            List of names of the SNTP ROOT files.
+        """
+        pass
+
+    @abstractmethod
+    def _from_udst(self, files: list[str]) -> None:
+        """\
+        [ Internal ] Import data from uDST ROOT files.
+
+        Parameters
+        ----------
+        files : list[str]
+            List of names of the uDST ROOT files.
+        """
+        pass
+
+    @abstractmethod
+    def _from_hdf5(self, files: list[str]) -> None:
+        """\
+        [ Internal ] Import data from HDF5 files.
+
+        Parameters
+        ----------
+        files : list[str]
+            List of names of the HDF5 files.
+        """
+        pass
+
+    @abstractmethod
+    def get_data_length(self) -> int:
+        """\
+        Get the length of the data table.
+
+        Returns
+        -------
+        int
+            The length of the data table.
+        """
         pass
 
     def _get_strategy_info(self) -> dict[str, str]:
@@ -154,18 +218,6 @@ class DataIOStrategy(ABC, Generic[TCov]):  # Can't use the cool 3.12 syntax :(
             "HDF5 Loader": get(self._hdf5_loader),
             "HDF5 Writer": get(self._hdf5_writer),
         }
-
-    @abstractmethod
-    def _from_sntp(self, files: list[str]) -> None:
-        pass
-
-    @abstractmethod
-    def _from_udst(self, files: list[str]) -> None:
-        pass
-
-    @abstractmethod
-    def _from_hdf5(self, files: list[str]) -> None:
-        pass
 
     def from_sntp(self, files: list[str]) -> None:
         """\
@@ -234,7 +286,7 @@ class DataIOStrategy(ABC, Generic[TCov]):  # Can't use the cool 3.12 syntax :(
         _error(
             NotImplementedError,
             "The HDF5 writer is not implemented yet!",
-            logger,
+            _logger,
         )
 
     def __str__(self) -> str:
