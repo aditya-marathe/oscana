@@ -15,14 +15,21 @@ __all__ = [
     "minos_numbers",
     "init_env_variables",
     "init_minos_numbers",
-    "init_variable_search",
-    "vs_search_variable",
-    "vs_print_roots",
-    "vs_print_variables",
-    "destroy_variable_search",
+    "get_func_lookup",
+    "VariableSearchTool",
 ]
 
-from typing import TypeAlias, Any, Literal, Callable, Final
+from typing import (
+    TYPE_CHECKING,
+    TypeAlias,
+    Any,
+    Literal,
+    Callable,
+    Final,
+    ClassVar,
+    Self,
+)
+from typing_extensions import Literal as LiteralExt
 
 import os, platform, json, re
 from importlib import import_module
@@ -34,23 +41,25 @@ import numpy.typing as npt
 
 import dotenv
 
-from .logger import _error
+from .logger import _error, _warn
 from .errors import OscanaError
 from .constants import RESOURCES_PATH
+
+if TYPE_CHECKING:
+    from .data.transform import TransformBase
 
 # =============================== [ Logging  ] =============================== #
 
 _logger = logging.getLogger("Root")
 
-# ======================= [ "Constant" Dictionaries  ] ======================= #
+# ============================= [ "Constants"  ] ============================= #
 
-minos_numbers: Final[dict[str, Any]] = {}
+minos_numbers: Final[dict[str, Any]] = {}  # Not exactly a constant! :P
 
-_variable_hashtable: Final[dict[str, dict[str, list[str]]]] = {}
-
-_supported_file_types: Final[tuple[str, ...]] = ("sntp_std",)
+_SUPPORTED_FILE_TYPES: Final[tuple[str]] = ("sntp_std",)
 
 _DynamicFuncPrefix: TypeAlias = Literal["hlp_", "cut_", "tfm_"]
+_FileType: TypeAlias = LiteralExt["sntp_std"]
 
 # ============================== [ Functions  ] ============================== #
 
@@ -220,7 +229,7 @@ def _get_dir_from_env(file: str) -> Path:
 
 def get_func_lookup(
     globals_: dict[str, Any], prefix: _DynamicFuncPrefix
-) -> Callable[[str], Callable[..., Any]]:
+) -> Callable[[str], Callable[..., Any] | type[TransformBase]]:
     """\
     Search for dynamic functions in the Oscana module.
 
@@ -234,7 +243,7 @@ def get_func_lookup(
 
     Returns
     -------
-    Callable[[str], Callable[..., Any]]
+    Callable[[str], Callable[..., Any] | type[TransformBase]]
         The "function lookup" function. :P
     """
     # Presistent dictionary to store relevant functions.
@@ -326,148 +335,220 @@ def import_plugins(file: str) -> dict[str, Any]:
 # ========================= [ Variable Search Tool ] ========================= #
 
 
-def init_variable_search() -> None:
+class VariableSearchTool:
     """\
-    Initialise the variable search tool.
+    Variable Search Tool
+    --------------------
     """
-    if _variable_hashtable:
-        _logger.info("Already initialised the variable search tool.")
-        return
 
-    dir_ = (RESOURCES_PATH / "variables").resolve()
+    _instance: ClassVar[VariableSearchTool | None] = None
 
-    if not dir_.exists():
-        _error(
-            OscanaError,
-            "Variable search tool file does not exist in Oscana's resources!",
-            _logger,
-        )
+    def __new__(cls: type[Self]) -> VariableSearchTool:
+        """\
+        [ Internal ] Borg Pattern for the `VariableSearchTool` class.
+        """
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
 
-    for f_name in _supported_file_types:
-        f_dir = dir_ / f"{f_name}.txt"
+        return cls._instance
 
-        if not f_dir.exists():
-            _error(
-                FileNotFoundError,
-                f"Variable search tool file '{f_name}.txt' is not supported.",
+    def __init__(self) -> None:
+        """\
+        Initialise the `VariableSearchTool` class.
+        """
+        self._lookup_table: dict[str, dict[str, list[str]]] = {}
+
+    def init_lookup_table(self) -> None:
+        """\
+        Initialise the variable lookup "table".
+        """
+        # (1) Check if it has already been initialised.
+
+        if self._lookup_table:
+            _logger.info("Already initialised the variable search tool.")
+            return
+
+        # (2) Import the list from resources.
+
+        dir_ = (RESOURCES_PATH / "variables").resolve()
+
+        if not dir_.exists():
+            _warn(
+                UserWarning,
+                "Variable search tool directory ('variables') is missing from"
+                " Oscana's resources!",
                 _logger,
             )
 
-        with open(f_dir, "r") as f:
-            _variable_hashtable[f_name] = {}
+            return
 
-            for line in f.readlines():
-                line_split = line.strip().split(".")
-                variable_root = line_split.pop(0)
-                _variable_hashtable[f_name].setdefault(variable_root, [])
+        for f_name in _SUPPORTED_FILE_TYPES:
+            f_dir = dir_ / f"{f_name}.txt"
 
-                if len(line_split):
-                    _variable_hashtable[f_name][variable_root].append(
-                        ".".join(line_split)
-                    )
+            if not f_dir.exists():
+                _warn(
+                    RuntimeWarning,
+                    f"Variable search tool file '{f_name}.txt' is no longer "
+                    "supported (file was not found in resources).",
+                    _logger,
+                )
 
-    _logger.info("Loaded variables to the search tool.")
+                continue
 
+            with open(f_dir, "r") as f:
+                self._lookup_table[f_name] = {}
 
-def _vs_check_and_get(file_type: str) -> dict[str, list[str]]:
-    """\
-    [ Internal ]
+                for line in f.readlines():
+                    line_split = line.strip().split(".")
+                    variable_root = line_split.pop(0)
+                    self._lookup_table[f_name].setdefault(variable_root, [])
 
-    Check if VS was initialised and if the file type is supported.
-    """
-    if not _variable_hashtable:
-        _error(
-            OscanaError,
-            "Variable search tool is not initialised.",
-            _logger,
-        )
+                    if len(line_split):
+                        self._lookup_table[f_name][variable_root].append(
+                            ".".join(line_split)
+                        )
 
-    file_type_variables = _variable_hashtable.get(file_type, None)
+        _logger.info("Loaded variables to the search tool.")
 
-    if file_type_variables is None:
-        _error(
-            OscanaError,
-            f"File type '{file_type}' is not supported by the search tool.",
-            _logger,
-        )
+    def _check_and_get_list(
+        self, file_type: _FileType
+    ) -> dict[str, list[str]] | None:
+        """\
+        [ Internal ] Check if the lookup table was initialised and if the file 
+        type is supported.
 
-    return file_type_variables
+        Parameters
+        ----------
+        file_type: FileType
+            The file type.
 
+        Returns
+        -------
+        dict[str, list[str]]
+            Gets the lookup table for the specified file type (a.k.a "list").
+        """
+        if not self._lookup_table:
+            _warn(
+                UserWarning,
+                "Variable search tool is not initialised.",
+                _logger,
+            )
 
-def vs_search_variable(file_type: str, query: str) -> None:
-    """\
-    Search for a variable using regular expressions black magic.
-    """
-    file_type_variables = _vs_check_and_get(file_type=file_type)
+            return
 
-    query_compiled = re.compile(query)
+        file_type_variables = self._lookup_table.get(file_type, None)
 
-    # Primitive, but it works.
+        if file_type_variables is None:
+            _warn(
+                UserWarning,
+                f"File type '{file_type}' is not supported by the search tool.",
+                _logger,
+            )
 
-    for key in sorted(file_type_variables.keys()):
-        for var in file_type_variables[key]:
-            if query_compiled.search(key + "." + var):
-                print(key + "." + var)
+            return
 
+        return file_type_variables
 
-def vs_print_roots(file_type: str) -> None:
-    """\
-    Variable Search Tool: Print the root variables for a given file type.
+    def search_for_variable(self, file_type: _FileType, query: str) -> None:
+        """\
+        Search for a variable using regular expressions black magic.
 
-    Parameters
-    ----------
-    file_type : str
-        The file type.
-    """
-    file_type_variables = _vs_check_and_get(file_type=file_type)
+        Parameters
+        ----------
+        file_type: FileType
+            The file type.
+        
+        query: str
 
-    for key in sorted(file_type_variables.keys()):
-        print(key)
+        """
+        file_type_variables = self._check_and_get_list(file_type=file_type)
 
+        if file_type_variables is None:
+            _warn(UserWarning, "Variable search failed!", _logger)
+            return
 
-def vs_print_variables(file_type: str, root: str = "*") -> None:
-    """\
-    Variable Search Tool: Print the variables for a given file type.
+        query_compiled = re.compile(query)
 
-    Parameters
-    ----------
-    file_type : str
-        The file type.
-    
-    root : str
-        The root variable. Default is '*'.
-    """
-    file_type_variables = _vs_check_and_get(file_type=file_type)
+        # Primitive, but it works.
 
-    print_title = lambda x: print(x + "\n" + "-" * len(x))
-
-    if root == "*":
         for key in sorted(file_type_variables.keys()):
-            print_title(key)
-
             for var in file_type_variables[key]:
-                print(key + "." + var)
+                if query_compiled.search(key + "." + var):
+                    print(key + "." + var)
 
-            print()
+    def print_roots(self, file_type: _FileType) -> None:
+        """\
+        Variable Search Tool: Print the root variables for a given file type.
 
-        return
+        Parameters
+        ----------
+        file_type : FileType
+            The file type.
+        """
+        file_type_variables = self._check_and_get_list(file_type=file_type)
 
-    if root not in file_type_variables:
-        _error(
-            OscanaError,
-            f"Root variable '{root}' is not found in the search tool.",
-            _logger,
-        )
+        if file_type_variables is None:
+            _warn(UserWarning, "Variable search failed!", _logger)
+            return
 
-    print_title(root)
+        for key in sorted(file_type_variables.keys()):
+            print(key)
 
-    for var in file_type_variables[root]:
-        print(root + "." + var)
+    def print_variables(self, file_type: _FileType, root: str = "*") -> None:
+        """\
+        Variable Search Tool: Print the variables for a given file type.
 
+        Parameters
+        ----------
+        file_type : FileType
+            The file type.
+        
+        root : str
+            The root variable. Default is '*'.
+        """
+        file_type_variables = self._check_and_get_list(file_type=file_type)
 
-def destroy_variable_search() -> None:
-    """\
-    Destroy the variable search tool.
-    """
-    _variable_hashtable.clear()
-    _logger.info("Destroyed the variable search tool.")
+        if file_type_variables is None:
+            _warn(UserWarning, "Variable search failed!", _logger)
+            return
+
+        print_title = lambda x: print(x + "\n" + "-" * len(x))
+
+        if root == "*":
+            for key in sorted(file_type_variables.keys()):
+                print_title(key)
+
+                for var in file_type_variables[key]:
+                    print(key + "." + var)
+
+                print()
+
+            return
+
+        if root not in file_type_variables:
+            _warn(
+                UserWarning,
+                f"Root variable '{root}' is not found in the search tool.",
+                _logger,
+            )
+
+            return
+
+        print_title(root)
+
+        for var in file_type_variables[root]:
+            print(root + "." + var)
+
+    def destroy_lookup_table(self) -> None:
+        """\
+        Destroy the variable search tool lookup table.
+        """
+        self._lookup_table.clear()
+        _logger.info("Destroyed the variable search tool.")
+
+    def __str__(self) -> str:
+        is_init = "True" if self._lookup_table else "False"
+        return f"oscana.{self.__class__.__name__}(has_lookup_table={is_init})"
+
+    def __repr__(self) -> str:
+        return str(self)
