@@ -21,10 +21,14 @@ from __future__ import annotations
 
 __all__ = []
 
+from typing import Any
+
 import logging
 from dataclasses import dataclass, field
 
 from ..logger import _error
+from ..utils import OscanaError
+from .transform import TransformBase
 
 # =============================== [ Logging  ] =============================== #
 
@@ -47,17 +51,16 @@ class TransformMetadata:
         List of transforms.
     """
 
-    cuts: list[str] = field(default_factory=list)
-    transforms: list[str] = field(default_factory=list)
+    transforms: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
 
-    def _add_transform(self, name: str) -> None:
+    def _add_transform(self, transform: TransformBase) -> None:
         """\
         Add a new transform to the metadata.
 
         Parameters
         ----------
-        name : str
-            Name of the transform.
+        transform: TransformBase
+            The transform to add.
 
         Notes
         -----
@@ -67,39 +70,122 @@ class TransformMetadata:
         # Note: Here I am not checking if the transform has already been added!
         #       This will be taken care of by the `DataHandler` class.
 
-        if name.startswith("cut_"):
-            self.cuts.append(name)
-        elif name.startswith("tfm_"):
-            self.transforms.append(name)
-        else:
+        if not isinstance(transform, TransformBase):
             _error(
-                ValueError,
-                (
-                    f"Transform name '{name}' does not adhere to Oscana naming "
-                    "convention."
-                ),
+                TypeError,
+                "Transform must be an instance of `TransformBase`.",
                 _logger,
             )
+
+        self.transforms.append(
+            (
+                transform.__class__.__name__,
+                transform._kwargs,
+            )
+        )
+
+    def _extract_transform_name(self, name: str) -> str:
+        """\
+        [ Internal ] Extract the transform name from the function name.
+        
+        Parameters
+        ----------
+        name : str
+            The function name.
+
+        Returns
+        -------
+        str
+            The transform name.
+        """
+        return "_".join(name.split("_")[2:]).lower()
+
+    def to_dict(self) -> dict[str, list[dict[str, Any]]]:
+        """\
+        Convert the metadata to a dictionary.
+
+        Returns
+        -------
+        dict[str, list[dict[str, Any]]]
+            A dictionary containing the metadata.
+        """
+        return {
+            "transforms": [
+                {
+                    "name": data[0],
+                    "shortened_name": self._extract_transform_name(data[0]),
+                    "kwargs": data[1],
+                }
+                for data in self.transforms
+            ]
+        }
+
+    @staticmethod
+    def from_dict(data: dict[str, list[dict[str, Any]]]) -> TransformMetadata:
+        """\
+        Load the metadata from a dictionary.
+
+        Parameters
+        ----------
+        data : dict[str, list[dict[str, Any]]]
+            The dictionary containing the metadata.
+        """
+        if "transforms" not in data:
+            _error(
+                KeyError,
+                "The dictionary does not contain the 'transforms' key.",
+                _logger,
+            )
+
+        metadata = TransformMetadata()
+
+        for transform in data["transforms"]:
+            if "name" not in transform or "kwargs" not in transform:
+                _error(
+                    OscanaError,
+                    "Failed to load the transforms for this data. Each "
+                    "transform must have a 'name' and 'kwargs' key.",
+                    _logger,
+                )
+
+                continue
+
+            metadata.transforms.append((transform["name"], transform["kwargs"]))
+
+        return metadata
 
     def print(self) -> None:
         """\
         Print the metadata.
         """
-        print("Cuts\n----")
-        for cut in self.cuts:
-            print(f"\t- {cut}")
-
-        if not len(self.cuts):
-            print("\t[ No Cuts Applied ]")
-
-        print("\nTransforms\n----------")
+        print("Cuts & Transforms\n-----------------")
         for transform in self.transforms:
-            print(f"\t- {transform}")
+            type_ = "CUT" if transform[0].startswith("cut_") else "TFM"
+            name = self._extract_transform_name(transform[0])
+            kwargs = ", ".join(
+                f"{key}={repr(value)}" for key, value in transform[1].items()
+            )
+            print(f"[{type_}] {name}({kwargs})")
 
         if not len(self.transforms):
-            print("\t[ No Transforms Applied ]")
+            print("\t[ No Cuts & Transforms Applied ]")
 
     def __eq__(self, value: object) -> bool:
+        """\
+        Check if the metadata is the same for two datasets.
+
+        Parameters
+        ----------
+        value : object
+            The other object to compare with.
+
+        Returns
+        -------
+        bool
+            True if the metadata is the same, False otherwise.
+        """
+        # (1) Check if the other object is of the same type.
+
         if not isinstance(value, TransformMetadata):
             _error(
                 ValueError,
@@ -110,21 +196,40 @@ class TransformMetadata:
                 _logger,
             )
 
-        # Check if the same cuts and transforms have been applied.
-        if (set(self.cuts) != set(value.cuts)) and (
-            set(self.transforms) != set(value.transforms)
-        ):
-            return False
+        # (2) Extract the transfrom names.
 
-        return True
+        these_names = set(
+            [self._extract_transform_name(data[0]) for data in self.transforms]
+        )
+        other_names = set(
+            [
+                value._extract_transform_name(data[0])
+                for data in value.transforms
+            ]
+        )
+
+        return these_names == other_names
 
     def __ne__(self, value: object) -> bool:
+        """\
+        Check if the metadata is not the same for two datasets.
+
+        Parameters
+        ----------
+        value : object
+            The other object to compare with.
+
+        Returns
+        -------
+        bool
+            True if the metadata is not the same, False otherwise.
+        """
         return not self.__eq__(value)
 
     def __str__(self) -> str:
         return (
-            f"Oscana.{self.__class__.__name__}(n_cuts={len(self.cuts)}, "
-            f"n_transforms={len(self.transforms)})"
+            f"oscana.{self.__class__.__name__}"
+            f"(n_transforms={len(self.transforms)})"
         )
 
     def __repr__(self) -> str:
