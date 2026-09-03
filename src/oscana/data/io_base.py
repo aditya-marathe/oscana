@@ -6,11 +6,14 @@ Author - Aditya Marathe
 Email  - aditya.marathe.20@ucl.ac.uk
 
 --------------------------------------------------------------------------------
+
+The data input/output strategy base class defines the expected interface for all
+strategies (loaded from "plugins"). 
 """
 
 from __future__ import annotations
 
-from typing import List, Set, Dict, Literal
+from typing import List, Set, Literal
 from typing import Union
 from typing import TYPE_CHECKING, TypeAlias, TypeVar, Generic
 
