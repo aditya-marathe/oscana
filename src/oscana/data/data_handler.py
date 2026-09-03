@@ -17,7 +17,7 @@ from typing import TypeVar, Generic, NoReturn, Any, Callable
 import logging
 
 from ..logger import _error, _warn
-from .io_base import DataIOStrategy
+from .io_base import _DataIOStrategy
 from .t_metadata import TransformMetadata
 from .f_metadata import FileMetadata
 from .transform import TransformBase
@@ -173,7 +173,7 @@ class DataHandler(Generic[T]):
         """
         # (1) Get the Data IO plugin.
 
-        data_io_plugin: type[DataIOStrategy[T]] | None = plugins.get(
+        data_io_plugin: type[_DataIOStrategy[T]] | None = plugins.get(
             data_io, None
         )
 
@@ -186,7 +186,7 @@ class DataHandler(Generic[T]):
 
         # (2) Initialise the instance variables.
 
-        self._data_io: DataIOStrategy[T] = data_io_plugin(parent=self)
+        self._data_io: _DataIOStrategy[T] = data_io_plugin(parent=self)
 
         self._variables = variables
         self._has_cuts_table = bool(make_cut_bool_table)  # Just to be sure.
@@ -256,7 +256,7 @@ class DataHandler(Generic[T]):
         n_cb_errors: int = 0
 
         for i, transform in enumerate(transforms):
-            len_before = self.io.get_data_length()
+            len_before = self.io.get_n_rows_data_table()
 
             # (2) Run callbacks before the transform.
             n_cb_errors += _run_callbacks(
@@ -296,7 +296,7 @@ class DataHandler(Generic[T]):
                 f"({i + 1}/{len(transforms)}) Applied the transform "
                 f"`{transform}` to the data with {n_tf_errors} errors. "
                 f"Number of Rows {len_before} -> "
-                f"{self.io.get_data_length()}."
+                f"{self.io.get_n_rows_data_table()}."
             )
 
         # Note: We do not want to interrupt the loop due to errors!
@@ -322,60 +322,6 @@ class DataHandler(Generic[T]):
             function.
         """
         return self._t_metadata.to_dict()
-
-    def print_handler_info(self) -> None:
-        """\
-        Print handler information.
-        """
-        info = self.io._get_strategy_info()
-
-        unknown = "???"
-
-        print(Style.BD + "Data IO\n" + "-" * 7 + Style.R)
-        print(
-            "\t- IO Strategy Class : "
-            + Style.IT
-            + Style.FG[33]
-            + str(self.io)
-            + Style.R
-        )
-        print(
-            "\t- SNTP Loader       : "
-            + Style.IT
-            + Style.FG[33]
-            + info.get("SNTP Loader", unknown)
-            + Style.R
-        )
-        print(
-            "\t- uDST Loader       : "
-            + Style.IT
-            + Style.FG[33]
-            + info.get("uDST Loader", unknown)
-            + Style.R
-        )
-        print(
-            "\t- HDF5 Loader       : "
-            + Style.IT
-            + Style.FG[33]
-            + info.get("HDF5 Loader", unknown)
-            + Style.R
-        )
-        print(
-            "\t- HDF5 Writer       : "
-            + Style.IT
-            + Style.FG[33]
-            + info.get("HDF5 Writer", unknown)
-            + Style.R
-        )
-        print(Style.BD + "\nSettings\n" + "-" * 8 + Style.R)
-        print(
-            "\t- Cuts Table : "
-            + (
-                Style.FG[10] + "Enabled".upper() + Style.R
-                if self._has_cuts_table
-                else Style.FG[9] + "Disabled".upper() + Style.R
-            )
-        )
 
     def print_metadata(self) -> None:
         """\
@@ -424,7 +370,7 @@ class DataHandler(Generic[T]):
         self._cuts_table = value
 
     @property
-    def io(self) -> DataIOStrategy[T]:
+    def io(self) -> _DataIOStrategy[T]:
         return self._data_io
 
     @property
@@ -434,7 +380,7 @@ class DataHandler(Generic[T]):
     def __str__(self) -> str:
         return (
             f"oscana.{self.__class__.__name__}("
-            f"n_variables={self.io.get_n_variables()}, "
+            f"n_variables={self.io.get_n_vars()}, "
             f"n_transforms={len(self._t_metadata.transforms)}, "
             f"n_files={len(self._f_metadata)})"
         )
