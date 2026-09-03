@@ -104,7 +104,7 @@ class _DataIOStrategy(ABC, Generic[TCov]):
     @abstractmethod
     def to_hdf5(
         self,
-        file: Union[str, Path],
+        out_file: Union[str, Path],
         compression: _SupportedCompressionType = None,
     ) -> None:
         """\
@@ -112,7 +112,7 @@ class _DataIOStrategy(ABC, Generic[TCov]):
 
         Parameters
         ----------
-        file : Union[str, Path]
+        out_file : Union[str, Path]
             The name or path of the HDF5 file to write to.
 
         compression : _SupportedCompressionType
