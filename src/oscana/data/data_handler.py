@@ -10,9 +10,12 @@ Email  - aditya.marathe.20@ucl.ac.uk
 
 from __future__ import annotations
 
-__all__ = ["DataHandler"]
 
-from typing import TypeVar, Generic, NoReturn, Any, Callable
+from typing import Any, List, Dict, NoReturn
+from typing import Optional, Union
+from typing import TypeVar, Generic
+
+__all__ = ["DataHandler"]
 
 import logging
 
@@ -30,9 +33,6 @@ from ..escape import Style
 _logger = logging.getLogger("Root")
 
 # ============================= [ Load Plugins ] ============================= #
-
-# Note: Not sure this is the best way to use the Plugin Architecture in Python.
-#       It seems to be working though...
 
 plugins = import_plugins(file=__file__)
 
@@ -153,7 +153,7 @@ class DataHandler(Generic[T]):
 
     def __init__(
         self,
-        variables: list[str],
+        variables: List[str],
         data_io: str = "PandasIO",
         make_cut_bool_table: bool = False,
     ) -> None:
@@ -162,7 +162,7 @@ class DataHandler(Generic[T]):
 
         Parameters
         ----------
-        variables : list[str]
+        variables : List[str]
             List of variables.
         
         data_io : type[DataIOStrategyABC]
@@ -188,8 +188,16 @@ class DataHandler(Generic[T]):
 
         self._data_io: _DataIOStrategy[T] = data_io_plugin(parent=self)
 
-        self._variables = variables
-        self._has_cuts_table = bool(make_cut_bool_table)  # Just to be sure.
+        self._variables = list(set(variables))  # ~ remove duplicates
+        if len(self._variables) != len(variables):
+            _warn(
+                RuntimeWarning,
+                "Duplicate variables found in the input list! Duplicates have "
+                "been removed.",
+                _logger,
+            )
+
+        self._has_cuts_table = bool(make_cut_bool_table)
 
         self._t_metadata = TransformMetadata()
         self._f_metadata: list[FileMetadata] = []
@@ -234,18 +242,18 @@ class DataHandler(Generic[T]):
 
     def apply_transforms(
         self,
-        transforms: list[TransformBase],
-        callbacks: list[DataCallbackBase] | None = None,
+        transforms: List[TransformBase],
+        callbacks: Optional[List[DataCallbackBase]] = None,
     ) -> None:
         """\
         Apply the transforms to the data.
         
         Parameters
         ----------
-        transforms : list[TransformBase]
+        transforms : List[TransformBase]
             List of transforms to apply.
 
-        callbacks : list[DHCallbackBase] | None
+        callbacks : Optional[List[DataCallbackBase]] | None
             List of callbacks to call after each transform. Defaults to `None`.
         """
         # (1) Input Validation.
@@ -310,7 +318,7 @@ class DataHandler(Generic[T]):
                 _logger,
             )
 
-    def get_transforms_dict(self) -> dict[str, dict[str, Any]]:
+    def get_transforms_dict(self) -> Dict[str, Dict[str, Any]]:
         """\
         Get the transforms as a dictionary.
         
@@ -359,7 +367,7 @@ class DataHandler(Generic[T]):
         self._data_table = value
 
     @property
-    def cuts(self) -> T | NoReturn:
+    def cuts(self) -> Union[T, NoReturn]:
         _check_has_cuts_table(has_cuts_table=self._has_cuts_table)
         return self._cuts_table
 
