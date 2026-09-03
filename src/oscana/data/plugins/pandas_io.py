@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from typing import Tuple, List, Literal, Callable
 from typing import Any, Union, Optional
-from typing import TYPE_CHECKING, TypeAlias
+from typing import TYPE_CHECKING, TypeAlias, TypedDict
 
 __all__ = ["PandasIO"]
 
@@ -57,9 +57,17 @@ SAVE_FILE_FORMAT = "{timestamp}_{name}.{format}"
 ERROR_IN_WARN_FORMAT = "[E//{error}]"  # ~ so I can Ctrl+F for it :)
 
 
-_FileLoaderResult: TypeAlias = Tuple[
-    pd.DataFrame, FileMetadata, TransformMetadata
-]
+class _FileLoaderResult(TypedDict):
+    """\
+    Returned by file loaders.
+    """
+
+    mini_data_df: pd.DataFrame
+    mini_cuts_df: pd.DataFrame
+    file_metadata: FileMetadata
+    transform_metadata: TransformMetadata
+
+
 _FileLoaderFuncType: TypeAlias = Callable[[Path, List[str]], _FileLoaderResult]
 
 # =============================== [ Helpers  ] =============================== #
@@ -295,93 +303,7 @@ def _is_jagged_array(data: pd.Series) -> bool:
     return isinstance(data.iloc[0], np.ndarray) and data.dtype == "object"
 
 
-def _loader_function(
-    helper_func: Callable[
-        [list[str], str | Path], _LoadedDataType[pd.DataFrame]
-    ],
-    variables: list[str],
-    files: list[str | Path],
-) -> _LoadedDataType[pd.DataFrame]:
-    """\
-    [ Internal ] Generic loader function to handle loading data from files.
-
-    Parameters
-    ----------
-    helper_func : Callable
-        The helper function to use for loading the data.
-
-    variables : list[str]
-        List of variables to load from the files.
-
-    files : list[str | Path]
-        List of files to load the data from.
-    
-    Returns
-    -------
-    LoadedDataType[pd.DataFrame]
-        A tuple containing:
-        - A `DataFrame` with the loaded variables.
-        - A list of `FileMetadata` objects with the metadata of the files.
-        - A `TransformMetadata` object with the metadata of the transforms.
-    """
-    exceptions_ = []
-    data_list: list[pd.DataFrame] = []
-    f_metadata_list: list[FileMetadata] = []
-    t_metadata_comp: TransformMetadata | None = None
-
-    for file in files:
-        try:
-            data, f_metadata, t_metadata = helper_func(variables, file)
-
-            if len(f_metadata_list) and all(
-                fm != f_metadata_list[-1] for fm in f_metadata
-            ):
-                _error(
-                    OscanaError,
-                    "All files must have the same metadata! The metadata for "
-                    f"{file} is different from the previous files.",
-                    logger,
-                )
-
-            if len(f_metadata_list) and t_metadata_comp != t_metadata:
-                _error(
-                    OscanaError,
-                    "All files must have the same transforms applied! The "
-                    f"transforms for {file} are different from the previous "
-                    "files.",
-                    logger,
-                )
-
-            t_metadata_comp = t_metadata_comp or t_metadata
-            data_list.append(data)
-            f_metadata_list.extend(f_metadata)
-
-        except Exception as e:
-            exceptions_.append(e)
-
-    if len(exceptions_):
-        for e in exceptions_:
-            if e.__class__.__name__ == "OscanaError":
-                continue
-
-            logger.error(
-                f"An execption was supressed! {e.__class__.__name__} - {e!s}"
-                + ("." if str(e)[-1] != "." or str(e)[-1] != "!" else "")
-            )
-        _error(
-            OscanaError,
-            "One or more files failed to load! (See the above exceptions.)",
-            logger,
-        )
-
-    assert (
-        t_metadata_comp is not None
-    ), "Unreachable: Transform metadata is `None`! "
-
-    return (pd.concat(data_list), f_metadata_list, t_metadata_comp)
-
-
-# =========================== [ Dynamic Helpers  ] =========================== #
+# =============================== [ Helpers  ] =============================== #
 
 
 def hlp_20250205_to_hdf5(
@@ -487,6 +409,9 @@ def _resolve_file_directory(file: str) -> Path:
     return file_path
 
 
+# ROOT files
+
+
 def _create_mini_df_from_uproot(
     uproot_file: uproot.ReadOnlyDirectory, variables: List[str]
 ) -> pd.DataFrame:
@@ -522,13 +447,23 @@ def _root_file_loader(
         file_name=file_path.name, file=uproot_file
     )  # ~ will throw if the file is not actually an SNTP file
 
-    mini_df = _create_mini_df_from_uproot(
+    mini_data_df = _create_mini_df_from_uproot(
         uproot_file=uproot_file,  # pyright: ignore[reportArgumentType]
         variables=variables,
     )
     uproot_file.close()  # pyright: ignore[reportAttributeAccessIssue]
 
-    return mini_df, file_metadata, TransformMetadata()
+    mini_cuts_df = pd.DataFrame()  # ~ will always be empty for ROOT files
+
+    return _FileLoaderResult(
+        mini_data_df=mini_data_df,
+        mini_cuts_df=mini_cuts_df,
+        file_metadata=file_metadata,
+        transform_metadata=TransformMetadata(),
+    )
+
+
+# HDF5 files
 
 
 def _create_mini_df_from_h5(
@@ -563,7 +498,12 @@ def _hdf5_file_loader(
     mini_df = _create_mini_df_from_h5(h5_file=h5_file, variables=variables)
     h5_file.close()
 
-    return mini_df, file_metadata, transform_metadata
+    return _FileLoaderResult(
+        mini_data_df=mini_df,
+        mini_cuts_df=pd.DataFrame(),
+        file_metadata=file_metadata,
+        transform_metadata=transform_metadata,
+    )
 
 
 # ============================= [ IO Strategy  ] ============================= #
@@ -587,8 +527,10 @@ class PandasIO(_DataIOStrategy[pd.DataFrame]):
         [ Internal ] Load data from a list of files using the given file loader
         function.
         """
-        exceptions_ = []
-        prev_t_metadata: Optional[TransformMetadata] = None
+        exceptions_: List[Exception] = []
+
+        mini_data_dfs: List[pd.DataFrame] = []
+        mini_cuts_dfs: List[pd.DataFrame] = []
 
         # Note: Variable naming here is not the best. `name` refers to the user
         #       -provided file name (in ".env" or a path), while `path` refers
@@ -607,14 +549,10 @@ class PandasIO(_DataIOStrategy[pd.DataFrame]):
                 path = _resolve_file_directory(file=name)
 
                 logger.debug(f"Trying to load data from '{name}'...")
-                mini_df, f_metadata, t_metadata = file_loader_func(
-                    path, self._parent._variables
-                )
+                result = file_loader_func(path, self._parent._variables)
 
                 # Check transform metadata...
-                if prev_t_metadata is None:
-                    prev_t_metadata = t_metadata
-                elif prev_t_metadata != t_metadata:
+                if self._parent._t_metadata != result["transform_metadata"]:
                     _error(
                         OscanaError,
                         "All files must have the same transforms applied! The "
@@ -623,12 +561,29 @@ class PandasIO(_DataIOStrategy[pd.DataFrame]):
                         logger,
                     )
 
-                # Update the data table and file metadata...
-                self._parent._data_table = pd.concat(
-                    [self._parent._data_table, mini_df],
-                    ignore_index=True,
-                )
-                self._parent._f_metadata.append(f_metadata)
+                # Check columns (so there are no future issues with `concat`).
+                if len(self._parent._data_table.columns) and (
+                    set(result["mini_data_df"].columns)
+                    != set(self._parent._data_table.columns)
+                ):
+                    _error(
+                        OscanaError,
+                        "All files must have the same columns! The columns for "
+                        f"'{name}' are different from the previous files.",
+                        logger,
+                    )
+
+                if len(self._parent._cuts_table.columns) and (
+                    set(result["mini_cuts_df"].columns)
+                    != set(self._parent._cuts_table.columns)
+                ):
+                    _error(
+                        OscanaError,
+                        "All files must have the same cut columns! The cut "
+                        f"columns for '{name}' are different from the previous "
+                        "files.",
+                        logger,
+                    )
 
             except Exception as e:
                 # ~ this ensures that the program does not stop if one of the
@@ -642,9 +597,18 @@ class PandasIO(_DataIOStrategy[pd.DataFrame]):
                 exceptions_.append(e)
             else:
                 self._cache.add(name)  # ~ this is important!
+                mini_data_dfs.append(result["mini_data_df"])
+                mini_cuts_dfs.append(result["mini_cuts_df"])
+                self._parent._f_metadata.append(result["file_metadata"])
 
-        if prev_t_metadata is not None:
-            self._parent._t_metadata = prev_t_metadata  # ~ more book keeping
+        self._parent._data_table = pd.concat(
+            [self._parent._data_table, *mini_data_dfs],
+            ignore_index=True,
+        )
+        self._parent._cuts_table = pd.concat(
+            [self._parent._cuts_table, *mini_cuts_dfs],
+            ignore_index=True,
+        )
 
         if len(exceptions_):
             _warn(
@@ -763,3 +727,18 @@ class PandasIO(_DataIOStrategy[pd.DataFrame]):
             return len(self._parent._cuts_table.columns)
 
         return 0
+
+    def get_vars_data_table(self) -> List[str]:
+        """\
+        Get the list of variable names in the data table.
+        """
+        return list(self._parent._data_table.columns)
+
+    def get_vars_cuts_table(self) -> List[str]:
+        """\
+        Get the list of variable names in the cuts table.
+        """
+        if self._parent.has_cuts_table:
+            return list(self._parent._cuts_table.columns)
+
+        return []
