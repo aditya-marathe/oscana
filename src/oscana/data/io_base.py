@@ -10,17 +10,15 @@ Email  - aditya.marathe.20@ucl.ac.uk
 
 from __future__ import annotations
 
+from typing import List, Set, Dict, Literal
+from typing import Union
+from typing import TYPE_CHECKING, TypeAlias, TypeVar, Generic
+
 __all__ = []
 
-from typing import TYPE_CHECKING, TypeAlias, TypeVar, Protocol, Generic, Literal
-
-import logging
 from pathlib import Path
-from abc import ABC, abstractmethod
 
-from .f_metadata import FileMetadata
-from .t_metadata import TransformMetadata
-from ..logger import _error
+from abc import ABC, abstractmethod
 
 if TYPE_CHECKING:
     from .data_handler import DataHandler
@@ -31,116 +29,29 @@ if TYPE_CHECKING:
 TCov = TypeVar("TCov", covariant=True)
 TCon = TypeVar("TCon", contravariant=True)
 
-LoadedDataType: TypeAlias = tuple[TCov, list[FileMetadata], TransformMetadata]
-
-
-class LoaderFuncType(Protocol, Generic[TCov]):
-    """\
-    [ Internal ]
-
-    Loader Function Type
-    --------------------
-
-    This a Protocol used for type hinting the loader functions used in
-    `DataIOStrategy` sub-classes.
-    """
-
-    def __call__(
-        self, variables: list[str], files: list[str | Path]
-    ) -> LoadedDataType[TCov]: ...
-
-
-class WriterFuncType(Protocol, Generic[TCon]):
-    """\
-    [ Internal ]
-
-    Writer Function Type
-    --------------------
-
-    This a Protocol used for type hinting the writer functions used in
-    `DataIOStrategy` sub-classes.
-    """
-
-    def __call__(
-        self,
-        data: TCon,
-        cuts: TCon | None,
-        file_metadata: list[FileMetadata],
-        transform_metadata: TransformMetadata,
-        file_path: str | Path,
-        compression: str | None = None,
-    ) -> None: ...
-
-
-# =============================== [ Logging  ] =============================== #
-
-_logger = logging.getLogger("Root")
-
-# =========================== [ Helper Functions ] =========================== #
-
-
-# TODO: This is not a great implementation. This will make a note of a file even
-#       if it is loaded incorrectly! All this needs to be changed so that if
-#       there was an error when loading, we do not "cache" the file.
-
-
-def _get_non_cache_files(cache: list[str], files: list[str]) -> list[str]:
-    """\
-    [ Internal ]
-
-    Get the files that are not in the cache.
-
-    Parameters
-    ----------
-    cache : list[str]
-        List of files that are already in the cache.
-
-    files : list[str]
-        List of files to check against the cache.
-
-    Returns
-    -------
-    list[str]
-        List of files that are not in the cache.
-    """
-    non_cache_files = []
-
-    for file in files:
-        if file in cache:
-            _logger.info(f"Skipping '{file}' as it is already in the cache.")
-            continue
-
-        non_cache_files.append(file)
-
-    cache.extend(non_cache_files)
-
-    return non_cache_files
-
+_SupportedCompressionType: TypeAlias = Literal["gzip", "lzf", None]
 
 # =========================== [ Data IO Strategy ] =========================== #
 
 
-class DataIOStrategy(ABC, Generic[TCov]):  # Can't use the cool 3.12 syntax :(
+class _DataIOStrategy(ABC, Generic[TCov]):  # Can't use the cool 3.12 syntax :(
+    """\
+    [ Internal ] An abstract base class for data input/output strategies.
+    """
 
-    _sntp_loader: LoaderFuncType[TCov]
-    _udst_loader: LoaderFuncType[TCov]
-    _hdf5_loader: LoaderFuncType[TCov]
+    def __init__(self, parent: "DataHandler") -> None:
+        """\
+        Initialises a `_DataIOStrategy` instance.
+        """
+        self._parent: "DataHandler" = parent
+        self._cache: Set[str] = set()
 
-    _hdf5_writer: WriterFuncType[TCov]
-
-    def __init__(self, parent: DataHandler) -> None:
-        self._parent: DataHandler = parent
-        self._cache: list[str] = []
+    # Abstract Methods
 
     @abstractmethod
     def _init_data_table(self) -> TCov:
         """\
         [ Internal ] Initialise the data table.
-
-        Returns
-        -------
-        DataFrame
-            The data table.
         """
         pass
 
@@ -148,64 +59,78 @@ class DataIOStrategy(ABC, Generic[TCov]):  # Can't use the cool 3.12 syntax :(
     def _init_cuts_table(self) -> TCov:
         """\
         [ Internal ] Initialise the cuts table.
+        """
+        pass
+
+    @abstractmethod
+    def from_sntp(self, files: List[str]) -> None:
+        """\
+        Load data from MINOS SNTP ROOT files.
+
+        Parameters
+        ----------
+        files : List[str]
+            List of files.
+        """
+        pass
+
+    @abstractmethod
+    def from_udst(self, files: List[str]) -> None:
+        """\
+        Load data from MINOS uDST (micro-DST) ROOT files.
+
+        Parameters
+        ----------
+        files : List[str]
+            List of files.
+        """
+        pass
+
+    @abstractmethod
+    def from_hdf5(self, files: List[Union[str, Path]]) -> None:
+        """\
+        Load data from HDF5 files.
         
-        Returns
-        -------
-        DataFrame
-            The cuts table.
+        Parameters
+        ----------
+        files : List[str]
+            List of files.
         """
         pass
 
     @abstractmethod
-    def _from_sntp(self, files: list[str]) -> None:
+    def to_hdf5(
+        self,
+        file: Union[str, Path],
+        compression: _SupportedCompressionType = None,
+    ) -> None:
         """\
-        [ Internal ] Import data from SNTP ROOT files.
+        Write everything to an HDF5 file.
 
         Parameters
         ----------
-        files : list[str]
-            List of names of the SNTP ROOT files.
+        file : Union[str, Path]
+            The name or path of the HDF5 file to write to.
+
+        compression : _SupportedCompressionType
+            The compression algorithm to use. If `None`, no compression is used.
+            Default is `None`.
+
+        Notes
+        -----
+        Compression algorithm "szip" is not supported due to licensing.
         """
         pass
 
     @abstractmethod
-    def _from_udst(self, files: list[str]) -> None:
-        """\
-        [ Internal ] Import data from uDST ROOT files.
-
-        Parameters
-        ----------
-        files : list[str]
-            List of names of the uDST ROOT files.
-        """
-        pass
-
-    @abstractmethod
-    def _from_hdf5(self, files: list[str | Path]) -> None:
-        """\
-        [ Internal ] Import data from HDF5 files.
-
-        Parameters
-        ----------
-        files : list[str | Path]
-            List of names of the HDF5 files.
-        """
-        pass
-
-    @abstractmethod
-    def get_data_length(self) -> int:
+    def get_n_rows_data_table(self) -> int:
         """\
         Get the length of the data table.
-
-        Returns
-        -------
-        int
-            The length of the data table.
         """
         pass
 
     @abstractmethod
-    def get_cuts_length(self) -> int:
+    def get_n_rows_cuts_table(self) -> int:
         """\
         Get the length of the cuts table.
 
@@ -217,129 +142,28 @@ class DataIOStrategy(ABC, Generic[TCov]):  # Can't use the cool 3.12 syntax :(
         pass
 
     @abstractmethod
-    def get_n_variables(self) -> int:
+    def get_n_vars_data_table(self) -> int:
         """\
-        Get the number of variables in the data and cuts table.
-
-        Returns
-        -------
-        int
-            Number of variables in the data and cuts table.
+        Get the number of variables in the data table.
         """
         pass
 
-    def _get_strategy_info(self) -> dict[str, str]:
+    @abstractmethod
+    def get_n_vars_cuts_table(self) -> int:
         """\
-        [ Internal ]
-        
-        Get the IO strategy information for all "loaders" and "writers".
-        
-        Returns
-        -------
-        dict[str, str]
-            Dictionary containing the IO strategy information.
+        Get the number of variables in the cuts table.
         """
-        doc = lambda x: x.__doc__.split("\n")[2][4:] if x.__doc__ else "???"
-        get = lambda x: doc(x)[6:] if doc(x).startswith("Name: ") else "???"
-        return {
-            "SNTP Loader": get(self._sntp_loader),
-            "uDST Loader": get(self._udst_loader),
-            "HDF5 Loader": get(self._hdf5_loader),
-            "HDF5 Writer": get(self._hdf5_writer),
-        }
+        pass
 
-    def from_sntp(self, files: list[str]) -> None:
+    # Public Methods
+
+    def get_n_vars(self) -> int:
         """\
-        Load data from SNTP ROOT files.
-
-        Parameters
-        ----------
-        files : list[str]
-            List of names of the SNTP ROOT files.  
-
-        Notes
-        -----
-        The names of the files should be from the environment variables (i.e. 
-        the '.env' file).
+        Get total number of variables in the data and cuts table.
         """
-        files = _get_non_cache_files(cache=self._cache, files=files)
+        return self.get_n_vars_data_table() + self.get_n_vars_cuts_table()
 
-        if not files:
-            return
-
-        return self._from_sntp(files=files)
-
-    def from_udst(self, files: list[str]) -> None:
-        """\
-        Load data from uDST ROOT files.
-
-        Parameters
-        ----------
-        files : list[str]
-            List of names of the uDST ROOT files.
-
-        Notes
-        -----
-        The names of the files should be from the environment variables (i.e.
-        the '.env' file).
-        """
-        files = _get_non_cache_files(cache=self._cache, files=files)
-
-        if not files:
-            return
-
-        return self._from_udst(files=files)
-
-    def from_hdf5(self, files: list[str]) -> None:
-        """\
-        Load data from HDF5 files.
-
-        Parameters
-        ----------
-        files : list[str]
-            List of names of the HDF5 files.
-
-        Notes
-        -----
-        The names of the files should be from the environment variables (i.e.
-        the '.env' file).
-        """
-        files = _get_non_cache_files(cache=self._cache, files=files)
-
-        if not files:
-            return
-
-        return self._from_hdf5(
-            files=files  # pyright: ignore[reportArgumentType]
-        )
-
-    def to_hdf5(
-        self,
-        file: str | Path,
-        compression: Literal["gzip", "lzf"] | None = None,
-    ) -> None:
-        """\
-        Write the data table to an HDF5 file.
-
-        Parameters
-        ----------
-        file : str | Path
-            The name of the HDF5 file to write to.
-
-        compression : Literal["gzip", "lzf"] | None
-            The compression algorithm to use. If `None`, no compression is used.
-            Default is `None`.
-
-        Notes
-        -----
-        Compression algorithms supported by `h5py` include: "gzip", "lzf", and 
-        "szip". However, "szip" is not supported due to licensing.
-        """
-        _error(
-            NotImplementedError,
-            "The HDF5 writer is not implemented yet!",
-            _logger,
-        )
+    # Dunders
 
     def __str__(self) -> str:
         return f"oscana.{self.__class__.__name__}()"
