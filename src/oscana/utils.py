@@ -15,6 +15,7 @@ __all__ = [
     "minos_numbers",
     "init_env_variables",
     "init_minos_numbers",
+    "get_bin_centers",
     "get_func_lookup",
     "VariableSearchTool",
 ]
@@ -64,11 +65,17 @@ _FileType: TypeAlias = LiteralExt["sntp_std", "sntp_fit"]
 # ============================== [ Functions  ] ============================== #
 
 
-def init_env_variables() -> None:
+def init_env_variables(dotenv_dir: str | Path | None = None) -> None:
     """\
     Load the .env file in the root directory of the project.
+
+    Parameters
+    ----------
+    dotenv_dir : str | Path | None
+        The directory of the .env file. Defaults to `None`.
+        
     """
-    if not dotenv.load_dotenv():
+    if not dotenv.load_dotenv(dotenv_path=dotenv_dir):
         _error(OscanaError, "Unsuccessful in loading the '.env' file!", _logger)
 
     _logger.info("Loaded environment variables from the '.env' file.")
@@ -207,6 +214,28 @@ def _get_dir_from_env(file: str) -> Path:
         f"Reference to file '{file}' does not exist in the '.env' file.",
         _logger,
     )
+
+
+# ============================== [ Histograms ] ============================== #
+
+
+def get_bin_centers(bin_edges: npt.ArrayLike) -> npt.NDArray:
+    """\
+    Get the bin centers from the bin edges.
+
+    Parameters
+    ----------
+    bin_edges : npt.ArrayLike
+        The bin edges.
+
+    Returns
+    -------
+    np.ndarray
+        The bin centers.
+    """
+    bin_edges = np.asarray(bin_edges)
+
+    return (bin_edges[:-1] + bin_edges[1:]) / 2
 
 
 # ======================= [ Oscana Dynamic Functions ] ======================= #

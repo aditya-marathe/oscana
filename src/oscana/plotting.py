@@ -23,6 +23,7 @@ __all__ = [
     "grid_layout",
     "spectrum_layout",
     "fd_uv_views_layout",
+    "marginal_hist_layout",
     # Modifiers
     "energy_axs_scale",
     "spec_fig_cleanup",
@@ -33,8 +34,7 @@ __all__ = [
     # Templates
     "plot_energy_resolution",
     "plot_fd_event_image",
-    # Helpers
-    "get_bin_centers",
+    "plot_2d_hist",
 ]
 
 from typing import Generator, Literal, Any, TYPE_CHECKING, TypeAlias
@@ -53,7 +53,7 @@ from matplotlib import patches
 from matplotlib import offsetbox
 
 from .themes import _load_settings
-from .utils import minos_numbers
+from .utils import minos_numbers, get_bin_centers
 from .images import create_fd_split_image
 from .constants import EPlaneView
 
@@ -496,6 +496,58 @@ def fd_uv_views_layout(
     return fig, axs
 
 
+def marginal_hist_layout(
+    gridspec_kwargs: dict[str, Any] | None = None, **figure_kwargs: Any
+) -> tuple[Figure, tuple[Axes, ...]]:
+    """\
+    Create a custom layout for a 2D histogram with marginal histograms.
+
+    Parameters
+    ----------
+    gridspec_kwargs : dict[str, Any] | None
+        Additional keyword arguments to pass to the `GridSpec` constructor.
+    
+    **figure_kwargs : Any
+        Additional keyword arguments to pass to the `plt.figure` function.
+
+    Returns
+    -------
+    tuple[Figure, tuple[Axes, ...]]
+        Matplotlib `Figure` object and a tuple of Matplotlib `Axes` object(s).
+    """
+    if gridspec_kwargs is None:
+        gridspec_kwargs = {}
+
+    if "figsize" in figure_kwargs:
+        width = max(figure_kwargs.pop("figsize"))
+    else:
+        width = max(plt.rcParams["figure.figsize"])
+
+    fig = plt.figure(figsize=(width, width), **figure_kwargs)
+
+    gs = gridspec.GridSpec(
+        width_ratios=[3, 1],
+        height_ratios=[1, 3],
+        hspace=0.05,
+        wspace=0.05,
+        **gridspec_kwargs,
+        nrows=2,
+        ncols=2,
+    )
+
+    ax = fig.add_subplot(gs[1, 0])
+
+    ax_x = fig.add_subplot(gs[0, 0], sharex=ax)
+    ax_x.tick_params(axis="x", labelbottom=False)
+
+    ax_y = fig.add_subplot(gs[1, 1], sharey=ax)
+    ax_y.margins(x=plt.rcParams["axes.ymargin"], y=plt.rcParams["axes.xmargin"])
+    ax_y.xaxis.tick_top()
+    ax_y.tick_params(axis="y", labelleft=False)
+
+    return fig, (ax, ax_x, ax_y)
+
+
 # ============================== [ Modifiers  ] ============================== #
 
 
@@ -648,14 +700,17 @@ def add_experiment_tag(
 
     Notes
     -----
+    If `fig` is specified, the tag will be added to the figure instead of the
+    axes.
+
     Optional keyword arguments include:
         - `loc`: Location of the tag in the axes coordinates.
         - `h_padding`: Horizontal padding between the components.
         - `h_align`: Horizontal alignment of the components.
-        - `h_seperation`: Horizontal separation between the components.
+        - `h_separation`: Horizontal separation between the components.
         - `v_padding`: Vertical padding between the components.
         - `v_align`: Vertical alignment of the components.
-        - `v_seperation`: Vertical separation between the components.
+        - `v_separation`: Vertical separation between the components.
         - `padding`: Padding around the tag.
         - `in_padding`: Padding inside the tag.
         - `enable_frame`: Whether to enable the frame around the tag.
@@ -663,16 +718,19 @@ def add_experiment_tag(
     title_props = {"fontsize": mpl.rcParams["font.size"]}
     extra_props = {"fontsize": mpl.rcParams["legend.fontsize"]}
 
+    experiment_str = r"$\mathbf{" + experiment + "}$"
+
+    if str(experiment).lower() == "nova":
+        experiment_str = r"$\mathbf{NO \nu A}$"
+
     components = [
         [
-            offsetbox.TextArea(
-                r"$\bf{" + experiment + "}$", textprops=title_props
-            ),
+            offsetbox.TextArea(experiment_str, textprops=title_props),
             offsetbox.TextArea(
                 (
                     ""
                     if (access == "Unknown") or (access == "Final")
-                    else r"$\it{" + access + "}$"
+                    else r"$\mathit{" + access + "}$"
                 ),
                 textprops=title_props,
             ),
@@ -709,7 +767,7 @@ def add_experiment_tag(
                     ),  # pyright: ignore[reportArgumentType]
                     pad=_options.get("h_padding", 0.0),
                     align=_options.get("h_align", "left"),
-                    sep=_options.get("h_seperation", 2.0),
+                    sep=_options.get("h_separation", 2.0),
                 )
             )
 
@@ -719,7 +777,7 @@ def add_experiment_tag(
             children=h_components,  # pyright: ignore[reportArgumentType]
             pad=_options.get("v_padding", 0.0),
             align=_options.get("v_align", "left"),
-            sep=_options.get("v_seperation", 2.0),
+            sep=_options.get("v_separation", 2.0),
         ),
         pad=_options.get("padding", 0.0),
         borderpad=_options.get("in_padding", 0.0),
@@ -857,11 +915,32 @@ def plot_hist_from_heights(
 
     # (2) Calculate histogram and stats info.
 
+    centres = get_bin_centers(bin_edges=bin_edges)
+    sum_bin_heights = np.sum(bin_heights)
+    mean = np.divide(
+        np.sum(centres * bin_heights),
+        sum_bin_heights,
+        out=np.zeros_like(sum_bin_heights, dtype=float),
+        where=sum_bin_heights != 0,
+    )
+
     info: dict[str, float | npt.NDArray] = {
         # Histogram
         "BinHeights": np.asarray(bin_heights, dtype=float),
         "BinEdges": np.asarray(bin_edges, dtype=float),
-        "BinCenters": get_bin_centers(bin_edges=bin_edges),
+        "BinCenters": centres,
+        # Stats (Estimated)
+        "Mean": float(mean),
+        "StD": float(
+            np.sqrt(
+                np.divide(
+                    np.sum(bin_heights * (centres - mean) ** 2),
+                    sum_bin_heights,
+                    out=np.zeros_like(sum_bin_heights, dtype=float),
+                    where=sum_bin_heights != 0,
+                )
+            )
+        ),
     }
 
     return fig, ax, info
@@ -1091,23 +1170,99 @@ def plot_fd_event_image(
     return fig, axs
 
 
-# =============================== [ Helpers  ] =============================== #
-
-
-def get_bin_centers(bin_edges: npt.ArrayLike) -> npt.NDArray:
+def plot_2d_hist(
+    x: npt.NDArray,
+    y: npt.NDArray,
+    x_bins: int | npt.NDArray | list[float] = 10,
+    y_bins: int | npt.NDArray | list[float] = 10,
+    z_label: str | None = None,
+    show_counts: bool = False,
+    add_colour_bar: bool = False,
+    figure_kwargs: dict[str, Any] | None = None,
+    hist_2d_kwargs: dict[str, Any] | None = None,
+    hist_kwargs: dict[str, Any] | None = None,
+):
     """\
-    Get the bin centers from the bin edges.
-
+    Plot a 2D histogram with marginal histograms.
+    
     Parameters
     ----------
-    bin_edges : npt.ArrayLike
-        The bin edges.
+    x : npt.NDArray
+        The x data.
+        
+    y : npt.NDArray
+        The y data.
+        
+    x_bins : int | npt.NDArray | list[float]
+        The number of bins or the bin edges for the x data. Defaults to 10.
+        
+    y_bins : int | npt.NDArray | list[float]
+        The number of bins or the bin edges for the y data. Defaults to 10.
+        
+    z_label : str | None
+        Label for the z-axis (colour bar). Defaults to `None`.
+        
+    show_counts : bool
+        Whether to show the counts on the marginal histograms. Defaults to
+        `True`.
+        
+    add_colour_bar : bool
+        Whether to add a colour bar to the plot. Defaults to `False`.
+        
+    figure_kwargs : dict[str, Any] | None
+        Additional keyword arguments to pass to the `figure` function. Defaults
+        to `None`.
 
-    Returns
-    -------
-    np.ndarray
-        The bin centers.
-    """
-    bin_edges = np.asarray(bin_edges)
+    hist_2d_kwargs : dict[str, Any] | None
+        Additional keyword arguments to pass to the `hist2d` function. Defaults
+        to `None`.
 
-    return (bin_edges[:-1] + bin_edges[1:]) / 2
+    hist_kwargs : dict[str, Any] | None
+        Additional keyword arguments to pass to the `hist` function for the
+        marginal histograms. Defaults to `None`.
+        """
+    if figure_kwargs is None:
+        figure_kwargs = {}
+
+    if hist_2d_kwargs is None:
+        hist_2d_kwargs = {}
+
+    if hist_kwargs is None:
+        hist_kwargs = {}
+
+    fig, axs = marginal_hist_layout(**figure_kwargs)
+
+    ax, ax_x, ax_y = axs
+
+    _, _, _, mesh = ax.hist2d(x=x, y=y, bins=(x_bins, y_bins), **hist_2d_kwargs)
+
+    ax_x.tick_params("y", labelleft=show_counts)
+    _, _, stats_x = plot_hist(
+        data=x, bins=x_bins, fig=fig, ax=ax_x, **hist_kwargs
+    )
+
+    ax_y.tick_params(
+        axis="x", which="both", labeltop=show_counts, bottom=True, rotation=-90
+    )
+    _, _, stats_y = plot_hist(
+        data=y,
+        bins=y_bins,
+        fig=fig,
+        ax=ax_y,
+        **hist_kwargs,
+        orientation="horizontal",
+    )
+
+    if z_label:
+        ax_x.set_ylabel(z_label)
+        ax_y.set_xlabel(z_label)
+
+    if add_colour_bar:
+        colour_bar = fig.colorbar(mesh, ax=ax_y, orientation="vertical")
+
+        if z_label:
+            colour_bar.set_label(z_label)
+
+    fig.tight_layout()
+
+    return (fig, axs, stats_x, stats_y)
