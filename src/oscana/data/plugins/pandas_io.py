@@ -462,21 +462,20 @@ def hlp_20250205_to_hdf5(
         )
 
 
-def _resolve_file_directory(file: Union[str, Path]) -> Path:
+def _resolve_file_directory(file: str) -> Path:
     """\
     [ Internal ] Get the file directory from enviornment variables or from
     a path.
     """
-    if isinstance(file, str):
-        try:  # ~ is it in the environment variables?...
-            file_path = _get_dir_from_env(file=file)
-            logger.debug(f"Retrived '{file}' from the environment variables.")
-            return file_path
-        except OscanaError:
-            logger.debug(
-                f"Failed to find '{file}' in the environment variables "
-                "- trying it as a path instead."
-            )
+    try:  # ~ is it in the environment variables?...
+        file_path = _get_dir_from_env(file=file)
+        logger.debug(f"Retrived '{file}' from the environment variables.")
+        return file_path
+    except OscanaError:
+        logger.debug(
+            f"Failed to find '{file}' in the environment variables "
+            "- trying it as a path instead."
+        )
 
     file_path = Path(file)  # ~ ... if not, then it must be a path.
 
@@ -596,16 +595,18 @@ class PandasIO(_DataIOStrategy[pd.DataFrame]):
         #       to the actual expanded file path.
 
         for name in user_files:
+            name = str(name)  # ~ the name should be a string for the cache
+
             if name in self._cache:
                 logger.warning(
-                    f"File '{name!s}' has already been loaded! Skipping..."
+                    f"File '{name}' has already been loaded! Skipping..."
                 )
                 continue
 
             try:
                 path = _resolve_file_directory(file=name)
 
-                logger.debug(f"Trying to load data from '{name!s}'...")
+                logger.debug(f"Trying to load data from '{name}'...")
                 mini_df, f_metadata, t_metadata = file_loader_func(
                     path, self._parent._variables
                 )
@@ -617,7 +618,7 @@ class PandasIO(_DataIOStrategy[pd.DataFrame]):
                     _error(
                         OscanaError,
                         "All files must have the same transforms applied! The "
-                        f"transforms for '{name!s}' are different from the "
+                        f"transforms for '{name}' are different from the "
                         "previous files.",
                         logger,
                     )
@@ -634,13 +635,13 @@ class PandasIO(_DataIOStrategy[pd.DataFrame]):
                 #   files fail to load - more useful in interactive sessions
                 _warn(
                     RuntimeWarning,
-                    f"An error occurred while loading data from {name!s} "
+                    f"An error occurred while loading data from {name} "
                     f"{ERROR_IN_WARN_FORMAT.format(error=e)}!",
                     logger=logger,
                 )
                 exceptions_.append(e)
             else:
-                self._cache.add(str(name))  # ~ this is important!
+                self._cache.add(name)  # ~ this is important!
 
         if prev_t_metadata is not None:
             self._parent._t_metadata = prev_t_metadata  # ~ more book keeping
@@ -648,8 +649,8 @@ class PandasIO(_DataIOStrategy[pd.DataFrame]):
         if len(exceptions_):
             _warn(
                 RuntimeWarning,
-                f"Code finished with {len(exceptions_)} errors. Some files may "
-                "have failed to load. (See the above exceptions.)",
+                f"Loading finished with {len(exceptions_)} errors. Some files "
+                "may have failed to load. (See the above exceptions.)",
                 logger=logger,
             )
 
@@ -701,11 +702,8 @@ class PandasIO(_DataIOStrategy[pd.DataFrame]):
         files : List[Union[str, Path]]
             List of files.
         """
-        file_paths = _get_file_directories(files=files)
         self._load_from_files(
-            user_files=files,
-            file_paths=file_paths,
-            file_loader_func=_hdf5_file_loader,
+            user_files=files, file_loader_func=_hdf5_file_loader
         )
 
     def to_hdf5(
