@@ -63,25 +63,25 @@ class _DataIOStrategy(ABC, Generic[TCov]):  # Can't use the cool 3.12 syntax :(
         pass
 
     @abstractmethod
-    def from_sntp(self, files: List[str]) -> None:
+    def from_sntp(self, files: List[Union[str, Path]]) -> None:
         """\
         Load data from MINOS SNTP ROOT files.
 
         Parameters
         ----------
-        files : List[str]
+        files : List[Union[str, Path]]
             List of files.
         """
         pass
 
     @abstractmethod
-    def from_udst(self, files: List[str]) -> None:
+    def from_udst(self, files: List[Union[str, Path]]) -> None:
         """\
         Load data from MINOS uDST (micro-DST) ROOT files.
 
         Parameters
         ----------
-        files : List[str]
+        files : List[Union[str, Path]]
             List of files.
         """
         pass
@@ -93,7 +93,7 @@ class _DataIOStrategy(ABC, Generic[TCov]):  # Can't use the cool 3.12 syntax :(
         
         Parameters
         ----------
-        files : List[str]
+        files : List[Union[str, Path]]
             List of files.
         """
         pass
