@@ -8,15 +8,19 @@ Email  - aditya.marathe.20@ucl.ac.uk
 
 --------------------------------------------------------------------------------
 
-This module contains functions to extract the event images from the SNTP files.
+This module contains functions to extract the event images from the MINOS SNTP 
+files. Only works for data from MINOS!
 """
 
 from __future__ import annotations
 
+from typing import List
+from typing import Optional
+from typing import TypedDict
+
 __all__ = [
     "image_to_sparse",
     "get_image_profiles",
-    "calculate_strip_com",
     "create_fd_full_image",
     "create_fd_split_image",
     "create_fd_crop_image",
@@ -28,13 +32,31 @@ import numpy as np
 import numpy.typing as npt
 import scipy.sparse as sps
 
-from .logger import _error
-from .utils import minos_numbers
+from .logger import _error, _warn
+from .utils import minos_numbers, get_bin_centers
 from .constants import IMAGE_DTYPE, EPlaneView
 
 # ================================ [ Logger ] ================================ #
 
 _logger = logging.getLogger("Root")
+
+# ============================== [ Constants  ] ============================== #
+
+
+class StripPlaneProfile(TypedDict):
+    """\
+    A profile for either a strip or a plane.
+    """
+
+    BinHeights: npt.NDArray
+    BinEdges: npt.NDArray
+    BinCenters: npt.NDArray
+    Mean: float
+    StD: float
+    Min: float
+    Max: float
+    Median: float
+
 
 # =========================== [ Helper Functions ] =========================== #
 
@@ -61,260 +83,111 @@ def image_to_sparse(image: npt.NDArray[IMAGE_DTYPE]) -> sps.csr_matrix:
     return sps.csr_matrix(image, shape=image.shape, dtype=IMAGE_DTYPE)
 
 
-def _get_image_profile_plane(
-    target_variable: npt.NDArray,
-    mean_pe: npt.NDArray,
-) -> tuple[npt.NDArray, npt.NDArray, npt.NDArray]:
-    """\
-    [ Internal ] Get the image profile for a specific plane.
-
-    Parameters
-    ----------
-    target_variable : npt.NDArray
-        The target variable for a selected plane to bin. Either the strips or
-        the planes.
-
-    mean_pe : npt.NDArray
-        The mean pulse height for the selected plane.
-
-    Returns
-    -------
-    tuple[npt.NDArray, npt.NDArray, npt.NDArray]
-        The bin centres, binned mean pulse height, and binned digit counts along
-        the target variable.
-    """
-    bin_centres = np.arange(target_variable.min(), target_variable.max() + 1)
-
-    binned_mean_pe = np.zeros_like(bin_centres, dtype=mean_pe.dtype)
-    binned_digits = np.zeros_like(bin_centres, dtype=int)
-
-    for i, bin_value in enumerate(bin_centres):
-        data_in_bin = mean_pe[target_variable == bin_value]
-
-        binned_mean_pe[i] = np.sum(data_in_bin)
-        binned_digits[i] = len(data_in_bin)
-
-    return bin_centres, binned_mean_pe, binned_digits
-
-
 def get_image_profiles(
-    stp_planeview: npt.NDArray,
-    target_variable: npt.NDArray,
-    mean_pe: npt.NDArray,
-) -> dict[str, npt.NDArray]:
-    """\
-    Bins the digitial hits along with other variables.
-
-    Parameters
-    ----------
-    stp_planeview : npt.NDArray
-        The plane view of strips and planes.
-
-    target_variable : npt.NDArray
-        The target variable to bin. Either the strips or the planes.
-
-    mean_pe : npt.NDArray
-        The mean pulse height for the selected plane.
-
-    Returns
-    -------
-    dict[str, npt.NDArray]
-        A dictionary containing the binned variables.
-    """
-    output_dict = {}
-
-    uz_selector = stp_planeview == EPlaneView.U.value
-    vz_selector = stp_planeview == EPlaneView.V.value
-
-    bin_centres_uz, binned_digits, binned_mean_pe = _get_image_profile_plane(
-        target_variable=target_variable[uz_selector],
-        mean_pe=mean_pe[uz_selector],
-    )
-    output_dict["bin_centres_uz"] = bin_centres_uz
-    output_dict["digits_uz"] = binned_digits
-    output_dict["mean_pe_uz"] = binned_mean_pe
-
-    bin_centres_vz, binned_digits, binned_mean_pe = _get_image_profile_plane(
-        target_variable=target_variable[vz_selector],
-        mean_pe=mean_pe[vz_selector],
-    )
-    output_dict["bin_centres_vz"] = bin_centres_vz
-    output_dict["digits_vz"] = binned_digits
-    output_dict["mean_pe_vz"] = binned_mean_pe
-
-    return output_dict
-
-
-def calculate_strip_com(
+    plane: EPlaneView,
     stp_planeview: npt.NDArray,
     stp_strip: npt.NDArray,
-    stp_pe_east: npt.NDArray,
-    stp_pe_west: npt.NDArray,
-) -> tuple[int, int]:
+    stp_plane: npt.NDArray,
+    weight_variable: Optional[npt.NDArray] = None,
+) -> tuple[StripPlaneProfile, StripPlaneProfile]:
     """\
-    Calculate the center of mass of the strip profiles in both UZ and VZ planes.
+    Get weighted strip and plane profiles for the given plane.
 
     Parameters
     ----------
+    plane : EPlaneView
+        The plane view to extract the profiles for (either U-Z or V-Z).
+
     stp_planeview : npt.NDArray
         The `stp.planeview` variable from the SNTP_BR_STD branch of SNTP files.
 
     stp_strip : npt.NDArray
         The `stp.strip` variable from the SNTP_BR_STD branch of SNTP files.
-
-    stp_pe_east : npt.NDArray
-        The `stp.ph0.pe` variable from the SNTP_BR_STD branch of SNTP files.
-
-    stp_pe_west : npt.NDArray
-        The `stp.ph1.pe` variable from the SNTP_BR_STD branch of SNTP files.
+    
+    stp_plane : npt.NDArray
+        The `stp.plane` variable from the SNTP_BR_STD branch of SNTP files.
+    
+    weight_variable : Optional[npt.NDArray]
+        The weights to apply to the profiles. Defaults to `None`.
 
     Returns
     -------
-    tuple[int, int]
-        The center of mass of the strip profiles in the UZ and VZ planes
-        respectively.    
+    tuple[StripPlaneProfile, StripPlaneProfile]
+        The strip and plane profiles for the given plane, respectively.
+
+    Notes
+    -----
+    Keys in the output dictionaries:
+        - "BinHeights": The heights of the histogram bins.
+        - "BinEdges": The edges of the histogram bins.
+        - "BinCenters": The centers of the histogram bins.
+        - "Mean": The mean of the variable.
+        - "StD": The standard deviation of the variable.
+        - "Min": The minimum value of the variable.
+        - "Max": The maximum value of the variable.
+        - "Median": The median value of the variable.
     """
-    # (1) Calculate the mean pulse height.
-    mean_ph = (stp_pe_east + stp_pe_west) / 2
+    # (1) Preparing the variables.
+    fd_n_planes = (
+        minos_numbers["FD"]["South"]["NPlanes"]
+        + minos_numbers["FD"]["North"]["NPlanes"]
+    )
+    fd_n_strips = minos_numbers["FD"]["NStripsPerPlane"]
 
-    # (2) Get the image profiles for the strip.
-    image_profiles = get_image_profiles(
-        stp_planeview=stp_planeview,
-        target_variable=stp_strip,
-        mean_pe=mean_ph,
-    )
-    image_profiles["mean_pe_uz"] = image_profiles["mean_pe_uz"] / np.sum(
-        image_profiles["mean_pe_uz"]
-    )
-    image_profiles["mean_pe_vz"] = image_profiles["mean_pe_vz"] / np.sum(
-        image_profiles["mean_pe_vz"]
-    )
+    plane_selector = stp_planeview == plane.value
+    stp_strip = stp_strip[plane_selector]
+    stp_plane = stp_plane[plane_selector] - np.array(1, dtype=stp_plane.dtype)
 
-    # (3) Calculate the strip center of mass.
-    bin_weights = image_profiles["mean_pe_uz"] * image_profiles["digits_uz"]
-    strip_com_uz = np.ceil(
-        np.sum(bin_weights * image_profiles["bin_centres_uz"])
-        / np.sum(bin_weights)
+    if weight_variable is not None:
+        weight_variable = weight_variable[plane_selector]
+
+    # (2) Strip profile.
+    strip_bin_heights, strip_bin_edges = np.histogram(
+        stp_strip, bins=np.arange(0, fd_n_strips, 1), weights=weight_variable
     )
 
-    bin_weights = image_profiles["mean_pe_vz"] * image_profiles["digits_vz"]
-    strip_com_vz = np.ceil(
-        np.sum(bin_weights * image_profiles["bin_centres_vz"])
-        / np.sum(bin_weights)
+    std_dev = float(np.std(stp_strip))
+
+    strip_profile: StripPlaneProfile = {
+        # Histogram
+        "BinHeights": np.asarray(strip_bin_heights, dtype=float),
+        "BinEdges": np.asarray(strip_bin_edges, dtype=float),
+        "BinCenters": get_bin_centers(bin_edges=strip_bin_edges),
+        # Stats
+        "Mean": float(np.mean(stp_strip)),
+        "StD": std_dev if (std_dev > 0) else 1.0,
+        "Min": float(np.min(stp_strip)),
+        "Max": float(np.max(stp_strip)),
+        "Median": float(np.median(stp_strip)),
+    }
+
+    # (3) Plane profile.
+    plane_bin_heights, plane_bin_edges = np.histogram(
+        stp_plane,
+        bins=np.arange(1, fd_n_planes + 1, 1),
+        weights=weight_variable,
     )
 
-    return int(strip_com_uz), int(strip_com_vz)
+    std_dev = float(np.std(stp_plane))
 
+    plane_profile: StripPlaneProfile = {
+        # Histogram
+        "BinHeights": np.asarray(plane_bin_heights, dtype=float),
+        "BinEdges": np.asarray(plane_bin_edges, dtype=float),
+        "BinCenters": get_bin_centers(bin_edges=plane_bin_edges),
+        # Stats
+        "Mean": float(np.mean(stp_plane)),
+        "StD": std_dev if (std_dev > 0) else 1.0,
+        "Min": float(np.min(stp_plane)),
+        "Max": float(np.max(stp_plane)),
+        "Median": float(np.median(stp_plane)),
+    }
 
-# Note: Old code will be yeeted out soon...
-#
-# def _create_cropped_image(
-#     plane: EPlaneView,
-#     stp_planeview: npt.NDArray,
-#     stp_strip: npt.NDArray,
-#     stp_plane: npt.NDArray,
-#     cropped_width: int,
-#     cropped_height: int,
-#     strip_com: int,
-#     fill: list[npt.NDArray],
-# ) -> npt.NDArray:
-#     """\
-#     [ Internal ] Create a cropped image from the full FD image for a particular
-#     plane.
-#
-#     Parameters
-#     ----------
-#     plane : EPlaneView
-#         The plane view to extract the images for (either U-Z or V-Z).
-#
-#     stp_planeview : npt.NDArray
-#         The `stp.planeview` variable from the SNTP_BR_STD branch of SNTP files.
-#
-#     stp_strip : npt.NDArray
-#         The `stp.strip` variable from the SNTP_BR_STD branch of SNTP files.
-#
-#     stp_plane : npt.NDArray
-#         The `stp.plane` variable from the SNTP_BR_STD branch of SNTP files.
-#
-#     cropped_width: int
-#         The width of the cropped image.
-#
-#     cropped_height: int
-#         The height of the cropped image.
-#
-#     fill : list[npt.NDArray] | None
-#         Array(s) to fill the image. If `None`, the image will be filled with
-#         "1"s.
-#
-#     Returns
-#     -------
-#     npt.NDArray
-#         The cropped event image for the selected plane.
-#     """
-#     # (1) Get data for the selected plane.
-#
-#     try:
-#         plane_selector = stp_planeview == plane.value
-#     except ValueError:
-#         _error(
-#             ValueError,
-#             "The `stp_planeview` array should be a 1D array!",
-#             _logger,
-#         )
-#
-#     # Note: 'stp.plane' is 1-indexed, while 'stp.strip' is 0-indexed!
-#
-#     this_stp_strip: npt.NDArray = stp_strip[plane_selector]
-#     this_stp_plane: npt.NDArray = stp_plane[plane_selector]
-#
-#     # (2) Translate the CoM and calculate the offset from the origin.
-#
-#     # Note: It is very important that these variables are recast to Python
-#     #       `int` to avoid overflows!
-#
-#     event_height = int(this_stp_strip.max()) - int(this_stp_strip.min())
-#
-#     strip_com = int(strip_com) - int(this_stp_strip.min())
-#     strip_com = int(np.floor(cropped_height / 2 - strip_com))
-#
-#     offset = min(0, cropped_height - 1 - (event_height + strip_com))
-#     strip_com = max(0, strip_com + offset)
-#
-#     # (3) Translate the track digits.
-#
-#     this_stp_plane = this_stp_plane - this_stp_plane.min()
-#     this_stp_strip = this_stp_strip - this_stp_strip.min() + strip_com
-#
-#     # (4) Fill the image.
-#
-#     image = np.zeros(shape=(cropped_height, cropped_width, len(fill)))
-#
-#     for i, fill_value in enumerate(fill):
-#         # (4.1) Run checks on the fill value.
-#
-#         this_fill = fill_value[plane_selector]
-#
-#         if this_fill.shape != this_stp_strip.shape:
-#             _error(
-#                 ValueError,
-#                 f"The `fill` array #{i + 1} should have the same shape as "
-#                 "'stp.strip', 'stp.plane' and 'stp.planeview'!",
-#                 _logger,
-#             )
-#
-#         # (4.2) Fill the image.
-#
-#         image[this_stp_strip, this_stp_plane, i] = this_fill
-#
-#     return image
+    return strip_profile, plane_profile
 
 
 def _crop_image(
-    image: npt.NDArray,
-    x: int,
-    y: int,
-    width: int,
-    height: int,
+    image: npt.NDArray, x: int, y: int, width: int, height: int
 ) -> npt.NDArray:
     """\
     [ Internal ] Crop an image to the given dimensions.
@@ -344,26 +217,41 @@ def _crop_image(
     image_height, image_width = image.shape[:2]
     image_channels_tuple = image.shape[2:]
 
+    # (1) Initialise the output image array.
     cropped_image = np.zeros(
-        shape=(height, width, *image_channels_tuple),
-        dtype=image.dtype,
+        shape=(height, width, *image_channels_tuple), dtype=image.dtype
     )
 
-    x_im_beg = max(0, x)
-    x_im_end = min(image_width, x + width)
+    if (x > (image_width - 1)) or ((y - height) > image_height) or (y < 0):
+        _warn(
+            RuntimeWarning,
+            f"The crop coordinate ({x}, {y}) is outside the image with width "
+            f"{image_width} and height {image_height}! Returned a blank image.",
+            _logger,
+        )
+        return cropped_image  # This should not happen!.
 
-    y_im_beg = max(0, y)
-    y_im_end = min(image_height, y + height)
+    # (2) Calculate the cropping indices. Why is this such a headache?
 
-    x_cp_beg = x_im_beg - x
-    x_cp_end = x_cp_beg + (x_im_end - x_im_beg)
+    # (2.1) These are the full image indices.
 
-    y_cp_beg = y_im_beg - y
-    y_cp_end = y_cp_beg + (y_im_end - y_im_beg)
+    img_x_beg = max(0, x)
+    img_x_end = min(image_width, x + width)
 
-    cropped_image[y_cp_beg:y_cp_end, x_cp_beg:x_cp_end, ...] = image[
-        y_im_beg:y_im_end, x_im_beg:x_im_end, ...
-    ]
+    img_y_beg = max(0, y - height)
+    img_y_end = min(image_height, y)
+
+    # (2.2) These are the cropped image indices.
+
+    out_x_beg = max(0, -x)  # If, for some reason, x < 0
+    out_x_end = out_x_beg + (img_x_end - img_x_beg)
+
+    out_y_beg = img_y_beg - (y - height)
+    out_y_end = out_y_beg + (img_y_end - img_y_beg)
+
+    cropped_image[out_y_beg:out_y_end, out_x_beg:out_x_end, ...] = image[
+        img_y_beg:img_y_end, img_x_beg:img_x_end, ...
+    ]  # ~ note that the `...` is there for a reason! - do not change this
 
     return cropped_image
 
@@ -376,7 +264,7 @@ def create_fd_full_image(
     stp_planeview: npt.NDArray,
     stp_strip: npt.NDArray,
     stp_plane: npt.NDArray,
-    fill: list[npt.NDArray] | None = None,
+    fill: Optional[List[npt.NDArray]] = None,
 ) -> npt.NDArray[IMAGE_DTYPE]:
     """\
     Get the FD event image for the given plane.
@@ -395,7 +283,7 @@ def create_fd_full_image(
     stp_plane : npt.NDArray
         The `stp.plane` variable from the SNTP_BR_STD branch of SNTP files.
 
-    fill : list[npt.NDArray] | None
+    fill : Optional[List[npt.NDArray]]
         Array(s) to fill the image. Defaults to `None`. If `None`, the image
         will be filled with "1"s.
 
@@ -471,7 +359,7 @@ def create_fd_split_image(
     stp_planeview: npt.NDArray,
     stp_strip: npt.NDArray,
     stp_plane: npt.NDArray,
-    fill: list[npt.NDArray] | None = None,
+    fill: Optional[List[npt.NDArray]] = None,
 ) -> tuple[npt.NDArray[IMAGE_DTYPE], npt.NDArray[IMAGE_DTYPE]]:
     """\
     Get the FD event image, split into the South and North submodules, for the 
@@ -491,7 +379,7 @@ def create_fd_split_image(
     stp_plane : npt.NDArray
         The `stp.plane` variable from the SNTP_BR_STD branch of SNTP files.
 
-    fill : list[npt.NDArray] | None
+    fill : Optional[List[npt.NDArray]]
         Array(s) to fill the image. Defaults to `None`. If `None`, the image
         will be filled with "1"s.
 
@@ -518,103 +406,6 @@ def create_fd_split_image(
     return full_image[:, :fd_s_n_planes, :], full_image[:, fd_s_n_planes:, :]
 
 
-# def create_fd_crop_image(
-#     stp_planeview: npt.NDArray,
-#     stp_strip: npt.NDArray,
-#     stp_plane: npt.NDArray,
-#     stp_pe_east: npt.NDArray,
-#     stp_pe_west: npt.NDArray,
-#     cropped_width: int,
-#     cropped_height: int,
-#     fill: list[npt.NDArray] | None = None,
-# ) -> tuple[npt.NDArray, npt.NDArray]:
-#     """\
-#     Create a cropped image from the full FD image.
-#
-#     Parameters
-#     ----------
-#     stp_planeview : npt.NDArray
-#         The `stp.planeview` variable from the SNTP_BR_STD branch of SNTP files.
-#
-#     stp_strip : npt.NDArray
-#         The `stp.strip` variable from the SNTP_BR_STD branch of SNTP files.
-#
-#     stp_plane : npt.NDArray
-#         The `stp.plane` variable from the SNTP_BR_STD branch of SNTP files.
-#
-#     stp_pe_east : npt.NDArray
-#         The pulse height (photoelectrons) for the east side.
-#
-#     stp_pe_west : npt.NDArray
-#         The pulse height (photoelectrons) for the west side.
-#
-#     cropped_width: int
-#         The width of the cropped image.
-#
-#     cropped_height: int
-#         The height of the cropped image.
-#
-#     fill : list[npt.NDArray] | None
-#         Array(s) to fill the image. Defaults to `None`. If `None`, the image
-#         will be filled with "1"s.
-#
-#     Returns
-#     -------
-#     tuple[npt.NDArray[IMAGE_DTYPE], npt.NDArray[IMAGE_DTYPE]]
-#         The cropped FD event images in the UZ and VZ planes respectively.
-#     """
-#     # (1) Run checks on the user input.
-#
-#     if not (stp_planeview.shape == stp_strip.shape == stp_plane.shape):
-#         _error(
-#             ValueError,
-#             "The `stp.planeview`, `stp.strip` and `stp.plane` arrays should "
-#             "have the same shape!",
-#             _logger,
-#         )
-#
-#     if fill is None:
-#         fill = [np.ones(shape=stp_planeview.shape, dtype=IMAGE_DTYPE)]
-#
-#     stp_strip = stp_strip.copy()
-#     stp_plane = stp_plane.copy() - np.array(1, dtype=stp_plane.dtype)
-#
-#     # (2) Calculate the center of mass for the strips.
-#
-#     strip_com_uz, strip_com_vz = calculate_strip_com(
-#         stp_planeview=stp_planeview,
-#         stp_strip=stp_strip,
-#         stp_pe_east=stp_pe_east,
-#         stp_pe_west=stp_pe_west,
-#     )
-#
-#     # (3) Get the UZ and VZ images.
-#
-#     image_uz = _create_cropped_image(
-#         plane=EPlaneView.U,
-#         stp_planeview=stp_planeview,
-#         stp_strip=stp_strip,
-#         stp_plane=stp_plane,
-#         cropped_width=cropped_width,
-#         cropped_height=cropped_height,
-#         strip_com=strip_com_uz,
-#         fill=fill,
-#     )
-#
-#     image_vz = _create_cropped_image(
-#         plane=EPlaneView.V,
-#         stp_planeview=stp_planeview,
-#         stp_strip=stp_strip,
-#         stp_plane=stp_plane,
-#         cropped_width=cropped_width,
-#         cropped_height=cropped_height,
-#         strip_com=strip_com_vz,
-#         fill=fill,
-#     )
-#
-#     return image_uz, image_vz
-
-
 def create_fd_crop_image(
     plane: EPlaneView,
     stp_planeview: npt.NDArray,
@@ -624,7 +415,9 @@ def create_fd_crop_image(
     stp_pe_west: npt.NDArray,
     cropped_width: int,
     cropped_height: int,
-    fill: list[npt.NDArray] | None = None,
+    fill: Optional[List[npt.NDArray]] = None,
+    constrain_strip: Optional[float] = None,
+    constrain_plane: Optional[float] = None,
 ) -> npt.NDArray[IMAGE_DTYPE]:
     """\
     Create a cropped image from the full FD image for a particular plane.
@@ -655,53 +448,68 @@ def create_fd_crop_image(
     cropped_height: int
         The height of the cropped image.
 
-    fill : list[npt.NDArray] | None
+    fill : Optional[List[npt.NDArray]]
         Array(s) to fill the image. Defaults to `None`. If `None`, the image
         will be filled with "1"s.
+
+    constrain_strip : Optional[float]
+        Only keep `constrain_strip` number of sigmas from the strip center of
+        mass. If `None`, no constraint is applied. Defaults to `None`.
+
+    constrain_plane : Optional[float]
+        Only keep `constrain_plane` number of sigmas from the plane center of
+        mass. If `None`, no constraint is applied. Defaults to `None`.
 
     Returns
     -------
     npt.NDArray[IMAGE_DTYPE]
         The cropped FD event image for the selected plane.        
     """
-
-    # (1) Get the full image.
-    image = create_fd_full_image(
+    # (1) Get the mean PE-weighted plane and strip profiles.
+    strip_profile, plane_profile = get_image_profiles(
         plane=plane,
         stp_planeview=stp_planeview,
         stp_strip=stp_strip,
         stp_plane=stp_plane,
+        weight_variable=(stp_pe_east + stp_pe_west) / 2,
+    )
+
+    # (2) Calculate the crop co-ordinates etc.
+    image_constrain = np.ones_like(stp_planeview).astype(bool)
+
+    if constrain_strip:
+        image_constrain &= np.abs(stp_strip - strip_profile["Mean"]) < (
+            constrain_strip * strip_profile["StD"]
+        )
+
+    if constrain_plane:
+        image_constrain &= np.abs(stp_plane - plane_profile["Mean"]) < (
+            constrain_plane * plane_profile["StD"]
+        )
+
+    # (3) Get the full image.
+    if constrain_strip or constrain_plane:
+        fill = (
+            [f[image_constrain] for f in fill] if (fill is not None) else None
+        )
+
+    image = create_fd_full_image(
+        plane=plane,
+        stp_planeview=stp_planeview[image_constrain],
+        stp_strip=stp_strip[image_constrain],
+        stp_plane=stp_plane[image_constrain],
         fill=fill,
     )
 
-    # (2) Calculate the center of mass for the strips.
-    strip_com_uz, strip_com_vz = calculate_strip_com(
-        stp_planeview=stp_planeview,
-        stp_strip=stp_strip,
-        stp_pe_east=stp_pe_east,
-        stp_pe_west=stp_pe_west,
-    )
+    # (4) Create the cropped image.
 
-    if plane == EPlaneView.U:
-        strip_com = int(strip_com_uz)
-    elif plane == EPlaneView.V:
-        strip_com = int(strip_com_vz)
-    else:
-        _error(
-            ValueError,
-            "Unreachable. The `plane` parameter should be either `EPlaneView.U`"
-            " or `EPlaneView.V`!",
-            _logger,
-        )
+    # TODO: This is being re-calculated three times in this function call!
+    plane_selector = stp_planeview == plane.value
 
-    strip_com = strip_com - np.min(stp_strip).astype(int)
-    strip_com = cropped_height // 2 - strip_com
-
-    # (3) Create the cropped image.
     return _crop_image(
         image=image,
-        x=np.min(stp_plane).astype(int),
-        y=np.min(stp_strip).astype(int) - strip_com,
+        x=(int(stp_plane[image_constrain & plane_selector].min()) - 1),
+        y=(int(strip_profile["Mean"]) + cropped_height // 2),
         width=cropped_width,
         height=cropped_height,
     )
