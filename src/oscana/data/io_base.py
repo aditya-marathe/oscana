@@ -37,7 +37,7 @@ _SupportedCompressionType: TypeAlias = Literal["gzip", "lzf", None]
 # =========================== [ Data IO Strategy ] =========================== #
 
 
-class _DataIOStrategy(ABC, Generic[TCov]):  # Can't use the cool 3.12 syntax :(
+class _DataIOStrategy(ABC, Generic[TCov]):
     """\
     [ Internal ] An abstract base class for data input/output strategies.
     """
@@ -155,6 +155,20 @@ class _DataIOStrategy(ABC, Generic[TCov]):  # Can't use the cool 3.12 syntax :(
     def get_n_vars_cuts_table(self) -> int:
         """\
         Get the number of variables in the cuts table.
+        """
+        pass
+
+    @abstractmethod
+    def get_vars_data_table(self) -> List[str]:
+        """\
+        Get the list of variable names in the data table.
+        """
+        pass
+
+    @abstractmethod
+    def get_vars_cuts_table(self) -> List[str]:
+        """\
+        Get the list of variable names in the cuts table.
         """
         pass
 
