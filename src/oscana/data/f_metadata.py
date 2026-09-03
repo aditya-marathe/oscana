@@ -18,8 +18,9 @@ from typing import Any
 #       Python, the `slots` parameter is not available. I will solve this issue
 #       if it arises.
 
-import logging, re
-from dataclasses import dataclass
+import re
+import logging
+from dataclasses import dataclass, field
 from datetime import datetime
 
 import numpy as np
@@ -42,7 +43,6 @@ from ..logger import _error
 from ..utils import OscanaError, _convert_from_utc
 from ..constants import SNTP_BR_STD, SNTP_VR_RUN, SNTP_VR_EVT_UTC
 from ..escape import Style
-
 
 # =============================== [ Logging  ] =============================== #
 
@@ -338,7 +338,7 @@ class FileMetadata:
     end_time: datetime
     n_records: int
 
-    create_time: datetime = datetime.now()
+    create_time: datetime = field(default_factory=datetime.now)
 
     def to_dict(self) -> dict[str, Any]:
         """\
