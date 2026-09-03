@@ -462,39 +462,30 @@ def hlp_20250205_to_hdf5(
         )
 
 
-def _get_file_directories(files: List[Union[str, Path]]) -> List[Path]:
+def _resolve_file_directory(file: Union[str, Path]) -> Path:
     """\
     [ Internal ] Get the file directory from enviornment variables or from
     a path.
     """
-    output: list[Path] = []
+    if isinstance(file, str):
+        try:  # ~ is it in the environment variables?...
+            file_path = _get_dir_from_env(file=file)
+            logger.debug(f"Retrived '{file}' from the environment variables.")
+            return file_path
+        except OscanaError:
+            logger.debug(
+                f"Failed to find '{file}' in the environment variables "
+                "- trying it as a path instead."
+            )
 
-    for file in files:
-        if not isinstance(file, Path):
-            try:
-                file_path = _get_dir_from_env(file=file)
-                logger.debug(
-                    "Retrived file directory from the environment variables."
-                )
-            except OscanaError:
-                logger.debug(
-                    f"Failed to find '{file}' in environment variables."
-                )
-            else:
-                output.append(file_path)
+    file_path = Path(file)  # ~ ... if not, then it must be a path.
 
-            continue
+    if not file_path.is_file():
+        _error(OscanaError, f"File '{file!s}' does not exist!", logger)
 
-        file_path = Path(file)
+    logger.debug(f"Found file '{file!s}' at '{file_path!s}'.")
 
-        if not file_path.is_file():
-            _error(OscanaError, f"File '{file}' does not exist!", logger)
-
-        logger.debug(f"Found file '{file}' at '{file_path!s}'.")
-
-        output.append(file_path)
-
-    return output
+    return file_path
 
 
 def _create_mini_df_from_uproot(
@@ -514,9 +505,7 @@ def _create_mini_df_from_uproot(
             full_variable_name
         ].array(  # pyright: ignore[reportAttributeAccessIssue]
             library="np"
-        )[
-            variable_name
-        ]
+        )
 
     return pd.DataFrame(file_data)
 
@@ -593,17 +582,12 @@ class PandasIO(_DataIOStrategy[pd.DataFrame]):
     def _load_from_files(
         self,
         user_files: List[Union[str, Path]],
-        file_paths: List[Path],
         file_loader_func: _FileLoaderFuncType,
     ) -> None:
         """\
         [ Internal ] Load data from a list of files using the given file loader
         function.
         """
-        assert len(user_files) == len(
-            file_paths
-        ), "Unreachable: The number of files and file paths must be the same!"
-
         exceptions_ = []
         prev_t_metadata: Optional[TransformMetadata] = None
 
@@ -611,7 +595,7 @@ class PandasIO(_DataIOStrategy[pd.DataFrame]):
         #       -provided file name (in ".env" or a path), while `path` refers
         #       to the actual expanded file path.
 
-        for name, path in zip(user_files, file_paths):
+        for name in user_files:
             if name in self._cache:
                 logger.warning(
                     f"File '{name!s}' has already been loaded! Skipping..."
@@ -619,6 +603,8 @@ class PandasIO(_DataIOStrategy[pd.DataFrame]):
                 continue
 
             try:
+                path = _resolve_file_directory(file=name)
+
                 logger.debug(f"Trying to load data from '{name!s}'...")
                 mini_df, f_metadata, t_metadata = file_loader_func(
                     path, self._parent._variables
@@ -691,11 +677,8 @@ class PandasIO(_DataIOStrategy[pd.DataFrame]):
             List of files.
         """
         # Note: Duplicate files are taken care of by the `_cache` checks.
-        file_paths = _get_file_directories(files=files)
         self._load_from_files(
-            user_files=files,
-            file_paths=file_paths,
-            file_loader_func=_root_file_loader,
+            user_files=files, file_loader_func=_root_file_loader
         )
 
     def from_udst(self, files: List[Union[str, Path]]) -> None:
