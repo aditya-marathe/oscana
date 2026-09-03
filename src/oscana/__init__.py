@@ -96,7 +96,10 @@ def print_version(fancy: bool = False) -> None:
 
 
 def init(
-    logs_dir="./", verbosity="WARNING", config_file: str | None = None
+    logs_dir="./",
+    verbosity="WARNING",
+    config_file: str | None = None,
+    dotenv_dir: str | None = None,
 ) -> None:
     """\
     Initialise the Oscana package.
@@ -112,6 +115,9 @@ def init(
     config_file : str, optional
         Path to the config file, by default None
 
+    dotenv_dir : str | Path | None, optional
+        The directory of the .env file. Defaults to `None`.
+
     Notes
     -----
     You can also call Oscana `init_*` functions separately.
@@ -119,7 +125,7 @@ def init(
     init_root_logger(
         logs_dir=logs_dir, verbosity=verbosity, config_file=config_file
     )
-    init_env_variables()
+    init_env_variables(dotenv_dir=dotenv_dir)
     init_minos_numbers()
 
 
