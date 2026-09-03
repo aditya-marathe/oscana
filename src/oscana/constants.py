@@ -13,6 +13,9 @@ This module contains all the constants used in the package.
 
 from __future__ import annotations
 
+from typing import List, Literal, Iterator
+from typing import Final, Union, Optional
+
 __all__ = [
     # Package Constants
     "RESOURCES_PATH",
@@ -41,10 +44,12 @@ __all__ = [
     "EPlaneView",
 ]
 
-from typing import Final, Literal
+
+from enum import Enum
+from collections import defaultdict
+
 from pathlib import Path
 import importlib.resources as resources
-from enum import Enum
 
 import numpy as np
 
@@ -96,7 +101,7 @@ SNTP_VR_EVT_UTC: Final[str] = (
 # ====================== [ SNTP Variable Collections  ] ====================== #
 
 
-class VariableCollection(list):
+class VariableCollection:
     """\
     VariableCollection
     ------------------
@@ -105,102 +110,149 @@ class VariableCollection(list):
 
     Attributes
     ----------
-    branch_name : str
-        The name of the ROOT branch.
+    list: list[str]
+        The list of variable names in the collection.
 
     uproot : list[str]
         The list of variable names prefixed with the ROOT branch name.
     """
 
-    __slots__ = ["_root"]
+    __slots__ = ["_variables"]
 
-    def __init__(self, variables: list[str], root: str | None = None) -> None:
+    def __init__(
+        self,
+        variables: Optional[Union[VariableCollection, List[str]]] = None,
+        root: str = "",
+    ) -> None:
         """\
         Initialises a new `VariableCollection`.
 
         Parameters
         ----------
-        variables : list[str]
-            The list of variable names.
+        variables : Optional[Union[VariableCollection, List[str]]]
+            The list of variable names with their roots. Defaults to `None`.
 
-        root : str | None
-            The ROOT branch name for the collection. If `None`, `.uproot` will
-            return the variable names as-is.
+        root : str
+            The ROOT branch name to prefix to all variables in the collection.
         """
-        super().__init__(variables)
+        # (1) Input validation
+        if variables is None:
+            if root:
+                raise ValueError("Cannot add a root without passing variables!")
 
-        self._root = root  # The ROOT Branch name!
+            variables = []
+        elif isinstance(variables, list):
+            if any("/" in string for string in variables) and root:
+                raise ValueError(
+                    "Cannot add a root when variables already have roots!"
+                )
+
+            if root:
+                variables = [f"{root}/{var}" for var in variables]
+        elif isinstance(variables, VariableCollection) and root:
+            raise ValueError(
+                "Cannot add a root when variables are already in a "
+                "`VariableCollection`!"
+            )
+
+        # (2) Initialise the data structure
+        self._variables = defaultdict(list)
+
+        # (3) Add the variables (given at initialisation)
+        self.add_variables(variables=variables)
+
+    def add_variables(
+        self, variables: Union[VariableCollection, List[str]]
+    ) -> None:
+        """\
+        Adds variables to the collection.
+
+        Parameters
+        ----------
+        variables : Union[VariableCollection, List[str]]
+            The list of variables to add to the collection.
+        """
+        if isinstance(variables, VariableCollection):
+            for branch, variables in variables._variables.items():
+                self._variables[branch].extend(variables)
+
+        elif isinstance(variables, list):
+            for compound_variable in variables:
+                split_result = compound_variable.split("/", 1)
+
+                if len(split_result) == 2:
+                    branch, variable = split_result
+                elif len(split_result) == 1:
+                    branch = ""
+                    variable = split_result[0]
+                else:
+                    raise ValueError("Unreachable! Something went very wrong!")
+
+                self._variables[branch].append(variable)
+
+        else:
+            raise ValueError(
+                "The `variables` must be a `VariableCollection` or a list of "
+                "variable names!"
+            )
 
     @property
-    def branch_name(self) -> str | None:
+    def branch_names(self) -> List[str]:
         """\
         The ROOT branch name for the collection, if it exists.
         """
-        return self._root
+        return list(self._variables.keys())
 
     @property
-    def uproot(self) -> list[str]:
+    def uproot(self) -> List[str]:
         """\
-        The list of variable names prefixed with the ROOT branch name.
+        Gets the list of variable names prefixed with the ROOT branch name.
+
+        Returns
+        -------
+        list[str]
+            The list of variable names prefixed with the ROOT branch name.
         """
-        if self._root is None:
-            return list(self)
+        return [
+            f"{branch}/{variable}"
+            for branch, variables in self._variables.items()
+            if branch
+            for variable in variables
+        ]
 
-        return [f"{self._root}/{var}" for var in self]
+    @property
+    def list_(self) -> List[str]:
+        """\
+        Gets the list of variable names in the collection.
 
-    def __add__(self, other: object) -> "VariableCollection":
+        Returns
+        -------
+        list[str]
+            The list of variable names in the collection.
+        """
+        return [
+            variable
+            for variables in self._variables.values()
+            for variable in variables
+        ]
+
+    # List-like Behaviours
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self.list_)
+
+    def __add__(self, other: object) -> VariableCollection:
+        this_variables = self.uproot
+
         if isinstance(other, VariableCollection):
-            if self._root != other._root:
-                raise ValueError(
-                    "Cannot add `VariableCollections` with different ROOT "
-                    f'branches! Found "{self._root}" and "{other._root}".'
-                )
-
-            return VariableCollection(
-                variables=list(self) + list(other),
-                root=self._root,
-            )
+            return VariableCollection(variables=this_variables + other.uproot)
 
         elif isinstance(other, list):
-            # Check the branch name.
-            branch_name = None
-            stripped_list: list[str] = []
-
-            for variable in other:
-                variable_split = str(variable).split("/")
-
-                if (branch_name is None) and (len(variable_split) > 1):
-                    branch_name = variable_split[0]
-
-                if (branch_name != variable_split[0]) and (
-                    branch_name is not None
-                ):
-                    raise ValueError(
-                        "Cannot add list of variables with different ROOT "
-                        f'branches! Found "{branch_name}" and '
-                        f'"{variable_split[0]}".'
-                    )
-
-                stripped_list.append(variable_split[-1])
-
-            if (self._root != branch_name) and (branch_name is not None):
-                raise ValueError(
-                    "Cannot add `VariableCollection` with list of variables "
-                    "with different ROOT branches! "
-                    f'Found "{self._root}" and "{branch_name}".'
-                )
-
-            # Note: This means that we assign the new list of variables the
-            #       branch name of this `VariableCollection`. This is just done
-            #       to keep this implementation simple.
-
-            return VariableCollection(
-                variables=list(self) + stripped_list,
-                root=self._root,
-            )
+            return VariableCollection(variables=this_variables + other)
 
         raise ValueError(
-            "Operation `+` only supported between `VariableCollections`!"
+            "Operation `+` only supported between `VariableCollections` and "
+            "lists!"
         )
 
     def __radd__(self, other: object) -> "VariableCollection":
@@ -213,6 +265,18 @@ class VariableCollection(list):
 
     def __rmul__(self, value: object) -> "VariableCollection":
         return self.__mul__(value=value)
+
+    def __getitem__(self, index: int) -> str:
+        return self.list_[index]
+
+    def __len__(self) -> int:
+        return len(self.list_)
+
+    def __str__(self) -> str:
+        return f"VariableCollection({self.list_})"
+
+    def __repr__(self) -> str:
+        return str(self.list_)
 
 
 HEADER_VARIABLES: Final[VariableCollection] = VariableCollection(
