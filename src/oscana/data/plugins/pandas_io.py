@@ -103,8 +103,8 @@ def _resolve_file_directory(file: str) -> Path:
 def _post_file_loader_checks(
     file_name: str,
     result: _FileLoaderResult,
-    parent_data_columns: List[str],
-    parent_cuts_columns: List[str],
+    data_vars_proxy: List[str],
+    cuts_vars_proxy: List[str],
     current_t_metadata: TransformMetadata,
 ) -> None:
     """\
@@ -120,9 +120,10 @@ def _post_file_loader_checks(
         )
 
     # Check columns (so there are no future issues with `concat`).
-    if len(parent_data_columns) and (
-        set(result["mini_data_df"].columns) != set(parent_data_columns)
-    ):
+    if len(data_vars_proxy) == 0:
+        data_vars_proxy.extend(result["mini_data_df"].columns)
+
+    if set(result["mini_data_df"].columns) != set(data_vars_proxy):
         _error(
             OscanaError,
             "All files must have the same columns! The columns for "
@@ -130,9 +131,10 @@ def _post_file_loader_checks(
             logger,
         )
 
-    if len(parent_cuts_columns) and (
-        set(result["mini_cuts_df"].columns) != set(parent_cuts_columns)
-    ):
+    if len(cuts_vars_proxy) == 0:
+        cuts_vars_proxy.extend(result["mini_cuts_df"].columns)
+
+    if set(result["mini_cuts_df"].columns) != set(cuts_vars_proxy):
         _error(
             OscanaError,
             "All files must have the same cut columns! The cut "
@@ -458,6 +460,9 @@ class PandasIO(_DataIOStrategy[pd.DataFrame]):
         f_metadata_list: List[FileMetadata] = []
         t_metadata = self._parent._t_metadata  # ~ a proxy
 
+        data_vars_proxy = self.get_vars_data_table().copy()
+        cuts_vars_proxy = self.get_vars_cuts_table().copy()
+
         # Note: Variable naming here is not the best. `name` refers to the user
         #       -provided file name (in ".env" or a path), while `path` refers
         #       to the actual expanded file path.
@@ -485,8 +490,8 @@ class PandasIO(_DataIOStrategy[pd.DataFrame]):
                 _post_file_loader_checks(
                     file_name=name,
                     result=result,
-                    parent_data_columns=self.get_vars_data_table(),
-                    parent_cuts_columns=self.get_vars_cuts_table(),
+                    data_vars_proxy=data_vars_proxy,
+                    cuts_vars_proxy=cuts_vars_proxy,
                     current_t_metadata=t_metadata,
                 )
 
