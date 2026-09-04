@@ -188,7 +188,7 @@ class DataHandler(Generic[T]):
 
         self._data_io: _DataIOStrategy[T] = data_io_plugin(parent=self)
 
-        self._variables = list(set(variables))  # ~ remove duplicates
+        self._variables = list(dict.fromkeys(variables))  # ~ remove duplicates
         if len(self._variables) != len(variables):
             _warn(
                 RuntimeWarning,
