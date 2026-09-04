@@ -13,8 +13,8 @@ strategies (loaded from "plugins").
 
 from __future__ import annotations
 
-from typing import List, Set, Literal
-from typing import Union
+from typing import List, Set, Literal, Callable
+from typing import Union, Optional
 from typing import TYPE_CHECKING, TypeAlias, TypeVar, Generic
 
 __all__ = []
@@ -33,6 +33,18 @@ TCov = TypeVar("TCov", covariant=True)
 TCon = TypeVar("TCon", contravariant=True)
 
 _SupportedCompressionType: TypeAlias = Literal["gzip", "lzf", None]
+
+_H5DataTypeConverter: TypeAlias = Callable[[str, str], str]
+# ^ for a given a column name and it's data type, return the data type to use
+#   when writing to HDF5.
+
+# ============================== [ Constants  ] ============================== #
+
+ALL_HDF5_VARIABLES: Literal["GET_ALL_HDF5_VARIABLES"] = "GET_ALL_HDF5_VARIABLES"
+
+H5_DATA_BRANCH_NAME: Literal["data"] = "data"
+H5_CUTS_BRANCH_NAME: Literal["cuts"] = "cuts"
+H5_META_BRANCH_NAME: Literal["meta"] = "meta"
 
 # =========================== [ Data IO Strategy ] =========================== #
 
@@ -105,7 +117,10 @@ class _DataIOStrategy(ABC, Generic[TCov]):
     def to_hdf5(
         self,
         out_file: Union[str, Path],
+        data_type_converter: Optional[_H5DataTypeConverter] = None,
         compression: _SupportedCompressionType = None,
+        compression_level: int = 6,
+        ensure_parent_dir: bool = False,
     ) -> None:
         """\
         Write everything to an HDF5 file.
@@ -115,13 +130,27 @@ class _DataIOStrategy(ABC, Generic[TCov]):
         out_file : Union[str, Path]
             The name or path of the HDF5 file to write to.
 
+        data_type_converter : Optional[_H5DataTypeConverter]
+            A function that takes a column name and its data type and returns 
+            the data type to use for HDF5. If `None`, nothing is done.
+            Default is `None`.
+
         compression : _SupportedCompressionType
             The compression algorithm to use. If `None`, no compression is used.
             Default is `None`.
 
+        compression_level : int
+            The level of compression to use for "gzip" (from 0 to 9). Defaults
+            to 6.
+
+        ensure_parent_dir : bool
+            If `True`, the parent directory of the output file will be created
+            if it does not exist. Default is `False`.
+
         Notes
         -----
-        Compression algorithm "szip" is not supported due to licensing.
+        Compression algorithm "szip" is not supported due to licensing. The out
+        file should have the following "branches": "data", "cuts", and "meta".
         """
         pass
 
