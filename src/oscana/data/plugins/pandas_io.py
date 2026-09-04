@@ -21,6 +21,7 @@ __all__ = ["PandasIO"]
 
 import logging
 from pathlib import Path
+from contextlib import closing
 
 import json
 import h5py
@@ -457,8 +458,8 @@ class PandasIO(_DataIOStrategy[pd.DataFrame]):
         cache_proxy: Set[str] = set()  # ~ a proxy
         mini_data_dfs: List[pd.DataFrame] = []
         mini_cuts_dfs: List[pd.DataFrame] = []
-        f_metadata_list: List[FileMetadata] = []
-        t_metadata = self._parent._t_metadata  # ~ a proxy
+        f_metadata_proxy: List[FileMetadata] = []
+        t_metadata_proxy = self._parent._t_metadata  # ~ a proxy
 
         data_vars_proxy = self.get_vars_data_table().copy()
         cuts_vars_proxy = self.get_vars_cuts_table().copy()
@@ -470,6 +471,11 @@ class PandasIO(_DataIOStrategy[pd.DataFrame]):
         for name in user_files:
             name = str(name)  # ~ the name should be a string for the cache
 
+            # TODO: Would I also need to compare filenames - i.e., check if I am
+            #       not loading the same file from different directories?
+            #
+            # I am leaving this as an issue for now because it will not impact
+            # my analysis...
             if name in self._cache:
                 logger.warning(
                     f"File '{name}' has already been loaded! Skipping..."
@@ -483,16 +489,20 @@ class PandasIO(_DataIOStrategy[pd.DataFrame]):
                 result = file_loader_func(path, self._parent._variables)
 
                 if not len(self._parent._f_metadata):
-                    # Only update the transform metadata like this if there
-                    # are no file loaded yet.
-                    t_metadata = result["transform_metadata"]
+                    # Only update the transform metadata like this if there are
+                    # no file loaded yet.
+                    #
+                    # Here we need to check the parent's file metadata because
+                    # we only overwrite the transform metadata if there are no
+                    # files loaded into the `DataHandler`!
+                    t_metadata_proxy = result["transform_metadata"]
 
                 _post_file_loader_checks(
                     file_name=name,
                     result=result,
                     data_vars_proxy=data_vars_proxy,
                     cuts_vars_proxy=cuts_vars_proxy,
-                    current_t_metadata=t_metadata,
+                    current_t_metadata=t_metadata_proxy,
                 )
 
             except Exception as e:
@@ -506,18 +516,18 @@ class PandasIO(_DataIOStrategy[pd.DataFrame]):
                 )
                 exceptions_.append(e)
             else:
-                self._cache.add(name)  # ~ this is important!
-                cache_proxy.add(name)
+                self._cache.add(str(path))  # ~ this is important!
+                cache_proxy.add(str(path))
                 mini_data_dfs.append(result["mini_data_df"])
                 mini_cuts_dfs.append(result["mini_cuts_df"])
-                f_metadata_list.extend(result["file_metadata"])
+                f_metadata_proxy.extend(result["file_metadata"])
 
         self._update_parent(
             cache=cache_proxy,
             mini_data_dfs=mini_data_dfs,
             mini_cuts_dfs=mini_cuts_dfs,
-            transform_metadata=t_metadata,
-            file_metadata=f_metadata_list,
+            transform_metadata=t_metadata_proxy,
+            file_metadata=f_metadata_proxy,
         )
 
         if len(exceptions_):
