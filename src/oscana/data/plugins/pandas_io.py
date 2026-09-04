@@ -486,7 +486,7 @@ class PandasIO(_DataIOStrategy[pd.DataFrame]):
                     file_name=name,
                     result=result,
                     parent_data_columns=self.get_vars_data_table(),
-                    parent_cuts_columns=self.get_vars_data_table(),
+                    parent_cuts_columns=self.get_vars_cuts_table(),
                     current_t_metadata=t_metadata,
                 )
 
