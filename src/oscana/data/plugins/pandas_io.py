@@ -452,7 +452,7 @@ class PandasIO(_DataIOStrategy[pd.DataFrame]):
         """
         exceptions_: List[Exception] = []
 
-        cache_proxy: Set[str] = self._cache.copy()  # ~ a proxy
+        cache_proxy: Set[str] = set()  # ~ a proxy
         mini_data_dfs: List[pd.DataFrame] = []
         mini_cuts_dfs: List[pd.DataFrame] = []
         f_metadata_list: List[FileMetadata] = []
