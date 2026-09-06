@@ -349,16 +349,26 @@ def import_plugins(file: str) -> dict[str, Any]:
             _logger,
         )
 
+    plugins: dict[str, Any] = {}
+
     for module_file in plugins_dir.glob("*.py"):
         module = import_module(f"{base_import_tree}.{module_file.stem}")
 
-        if hasattr(module, "__all__"):
-            return {
-                name: getattr(module, name)
-                for name in getattr(module, "__all__")
-            }
+        if not hasattr(module, "__all__"):
+            continue
 
-    return {}
+        for name in getattr(module, "__all__"):
+            if name in plugins:
+                _warn(
+                    RuntimeWarning,
+                    f"Plug-in '{name}' is defined in more than one module! "
+                    f"The one from '{module_file.name}' will be used.",
+                    _logger,
+                )
+
+            plugins[name] = getattr(module, name)
+
+    return plugins
 
 
 # ========================= [ Variable Search Tool ] ========================= #
