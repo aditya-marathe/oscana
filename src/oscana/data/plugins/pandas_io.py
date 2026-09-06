@@ -606,6 +606,11 @@ class PandasIO(_DataIOStrategy[pd.DataFrame]):
                 self._cache.add(str(path))  # ~ this is important!
                 cache_proxy.add(str(path))
 
+                logger.info(
+                    f"Loaded {len(result['mini_data_df'])} rows from "
+                    f"'{name}'."
+                )
+
                 # ~ every frame goes in with the same column order, so `concat`
                 #   never has to align them later on
                 mini_data_dfs.append(
@@ -630,6 +635,12 @@ class PandasIO(_DataIOStrategy[pd.DataFrame]):
 
         if update_error is not None:
             exceptions_.append(update_error)
+        elif len(mini_data_dfs):
+            logger.info(
+                f"Finished loading {len(mini_data_dfs)} file(s). The data "
+                f"table now has {self.get_n_rows_data_table()} rows and "
+                f"{self.get_n_vars_data_table()} variables."
+            )
 
         if len(exceptions_):
             _warn(
@@ -786,6 +797,11 @@ class PandasIO(_DataIOStrategy[pd.DataFrame]):
                 transform_metadata=self._parent._t_metadata,
                 compression_kwargs=compression_kwargs,
             )
+
+        logger.info(
+            f"Wrote {self.get_n_rows_data_table()} rows and "
+            f"{self.get_n_vars_data_table()} variables to '{out_file!s}'."
+        )
 
     @override
     def get_n_rows_data_table(self) -> int:
