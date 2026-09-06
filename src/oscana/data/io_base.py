@@ -40,8 +40,6 @@ _H5DataTypeConverter: TypeAlias = Callable[[str, str], str]
 
 # ============================== [ Constants  ] ============================== #
 
-ALL_HDF5_VARIABLES: Literal["GET_ALL_HDF5_VARIABLES"] = "GET_ALL_HDF5_VARIABLES"
-
 H5_DATA_BRANCH_NAME: Literal["data"] = "data"
 H5_CUTS_BRANCH_NAME: Literal["cuts"] = "cuts"
 H5_META_BRANCH_NAME: Literal["meta"] = "meta"
