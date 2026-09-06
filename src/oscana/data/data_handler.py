@@ -188,6 +188,14 @@ class DataHandler(Generic[T]):
 
         self._data_io: _DataIOStrategy[T] = data_io_plugin(parent=self)
 
+        if not len(variables):
+            _error(
+                OscanaError,
+                "The list of variables is empty! Specify at least one variable "
+                "to load.",
+                _logger,
+            )
+
         self._variables = list(dict.fromkeys(variables))  # ~ remove duplicates
         if len(self._variables) != len(variables):
             _warn(
