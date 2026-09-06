@@ -16,12 +16,12 @@ from __future__ import annotations
 from typing import List, Dict, Set, Callable
 from typing import Any, Union, Optional
 from typing import TYPE_CHECKING, TypeAlias, TypedDict
+from typing_extensions import override
 
 __all__ = ["PandasIO"]
 
 import logging
 from pathlib import Path
-from contextlib import closing
 
 import json
 import h5py
@@ -37,7 +37,6 @@ from ..io_base import (
     _DataIOStrategy,
     _SupportedCompressionType,
     _H5DataTypeConverter,
-    ALL_HDF5_VARIABLES,
     H5_DATA_BRANCH_NAME,
     H5_CUTS_BRANCH_NAME,
     H5_META_BRANCH_NAME,
@@ -91,7 +90,7 @@ def _resolve_file_directory(file: str) -> Path:
             "- trying it as a path instead."
         )
 
-    file_path = Path(file)  # ~ ... if not, then it must be a path.
+    file_path = Path(file).expanduser().resolve()
 
     if not file_path.is_file():
         _error(OscanaError, f"File '{file!s}' does not exist!", logger)
@@ -101,16 +100,53 @@ def _resolve_file_directory(file: str) -> Path:
     return file_path
 
 
+def _reorder_columns(df: pd.DataFrame, columns: List[str]) -> pd.DataFrame:
+    """\
+    [ Internal ] Order the columns of a `DataFrame` in a certain way.
+    """
+    if list(df.columns) == columns:
+        return df
+
+    return df[columns]
+
+
 def _post_file_loader_checks(
     file_name: str,
     result: _FileLoaderResult,
     data_vars_proxy: List[str],
     cuts_vars_proxy: List[str],
     current_t_metadata: TransformMetadata,
+    has_cuts_table: bool,
 ) -> None:
     """\
     [ Internal ] Perform checks after the file loader has done its job.
     """
+    # A file that carries cuts can only be loaded into a `DataHandler` that was
+    # set up with a cuts table - otherwise those cuts would be silently thrown
+    # away.
+    if not has_cuts_table and len(result["mini_cuts_df"].columns):
+        _error(
+            OscanaError,
+            f"The file '{file_name}' was saved with cuts "
+            f"{sorted(result['mini_cuts_df'].columns)}, but this "
+            "`DataHandler` has no cuts table! Re-create it with "
+            "`make_cut_bool_table=True`.",
+            logger,
+        )
+
+    # Check for data/cut name collisions. Now, this should never happen but, oh
+    # well, it does not hurt to check.
+    duplicate_vars = set(result["mini_data_df"].columns) & set(
+        result["mini_cuts_df"].columns
+    )
+    if duplicate_vars:
+        _error(
+            OscanaError,
+            f"Variable(s) {sorted(duplicate_vars)} in '{file_name}' are "
+            "used as both a data and a cut variable!",
+            logger,
+        )
+
     # Check transform metadata...
     if current_t_metadata != result["transform_metadata"]:
         _error(
@@ -120,7 +156,9 @@ def _post_file_loader_checks(
             logger,
         )
 
-    # Check columns (so there are no future issues with `concat`).
+    # Check columns (so there are no future issues with `concat`). Note: the
+    # comparison is order-insensitive, since `_reorder_columns` puts every
+    # frame into the order of the proxy before we concatenate anything.
     if len(data_vars_proxy) == 0:
         data_vars_proxy.extend(result["mini_data_df"].columns)
 
@@ -176,18 +214,19 @@ def _root_file_loader(
     """\
     [ Internal ] Load data from a ROOT file using Uproot.
     """
-    uproot_file = uproot.open(file_path)
-    logger.debug(f"Opened {file_path!s} using Uproot.")
+    with uproot.open(
+        file_path
+    ) as uproot_file:  # pyright: ignore[reportGeneralTypeIssues]
+        logger.debug(f"Opened {file_path!s} using Uproot.")
 
-    file_metadata = FileMetadata.from_sntp(
-        file_name=file_path.name, file=uproot_file
-    )  # ~ will throw if the file is not actually an SNTP file
+        file_metadata = FileMetadata.from_sntp(
+            file_name=file_path.name, file=uproot_file
+        )  # ~ will throw if the file is not actually an SNTP file
 
-    mini_data_df = _create_mini_df_from_uproot(
-        uproot_file=uproot_file,  # pyright: ignore[reportArgumentType]
-        variables=variables,
-    )
-    uproot_file.close()  # pyright: ignore[reportAttributeAccessIssue]
+        mini_data_df = _create_mini_df_from_uproot(
+            uproot_file=uproot_file,  # pyright: ignore[reportArgumentType]
+            variables=variables,
+        )
 
     mini_cuts_df = pd.DataFrame()  # ~ will always be empty for ROOT files
 
@@ -260,7 +299,7 @@ def _fill_h5_branch_from_df(
     [ Internal ] Fill a branch in an HDF5 file from a `DataFrame`.
     """
     for column in df.columns:
-        data_type: Union[str, h5py.special_dtype] = df[column].dtype
+        data_type = df[column].dtype
 
         if _is_jagged_array(data=df[column]):
             data_type = h5py.special_dtype(vlen=df[column].iloc[0].dtype)
@@ -324,12 +363,51 @@ def _read_h5_metadata_branch(
     return f_metadata, t_metadata
 
 
+def _check_h5_group_has_variables(
+    file: h5py.File, group_name: str, variables: List[str]
+) -> None:
+    """\
+    [ Internal ] Check if variables exist.
+    """
+    group = file[group_name]
+
+    if not isinstance(group, h5py.Group):
+        _error(
+            OscanaError,
+            f"The '{group_name}' branch is not a group!",
+            logger,
+        )
+
+    available_variables = set(group.keys())
+
+    missing_variables = sorted(
+        {
+            variable.split("/")[-1]
+            for variable in variables
+            if variable.split("/")[-1] not in available_variables
+        }
+    )
+
+    if missing_variables:
+        _error(
+            OscanaError,
+            f"Variable(s) {missing_variables} were not found in the "
+            f"'{group_name}' branch! The available variables are "
+            f"{sorted(available_variables)}.",
+            logger,
+        )
+
+
 def _create_mini_df_from_h5(
     file: h5py.File, group_name: str, variables: List[str]
 ) -> pd.DataFrame:
     """\
     [ Internal ] Load a "mini" `DataFrame` from a single HDF5 file.
     """
+    _check_h5_group_has_variables(
+        file=file, group_name=group_name, variables=variables
+    )
+
     file_data: dict[str, npt.NDArray] = {}
 
     for full_variable_name in variables:
@@ -339,9 +417,14 @@ def _create_mini_df_from_h5(
 
         h5_branch = file[f"{group_name}/{variable_name}"]
 
-        file_data[variable_name] = np.asarray(
-            h5_branch[()]  # pyright: ignore[reportIndexIssue]
-        )
+        if not isinstance(h5_branch, h5py.Dataset):
+            _error(
+                OscanaError,
+                f"Variable '{group_name}/{variable_name}' is not a dataset!",
+                logger,
+            )
+
+        file_data[variable_name] = np.asarray(h5_branch[()])
 
     return pd.DataFrame(file_data)
 
@@ -354,13 +437,6 @@ def _hdf5_file_loader(
     """
     with h5py.File(file_path, "r") as h5_file:
         logger.debug(f"Opened {file_path!s} using `h5py`.")
-
-        if ALL_HDF5_VARIABLES in variables:
-            variables = list(
-                h5_file[
-                    "data"
-                ].keys()  # pyright: ignore[reportAttributeAccessIssue]
-            )
 
         cut_variables = list(
             h5_file[
@@ -408,41 +484,52 @@ class PandasIO(_DataIOStrategy[pd.DataFrame]):
         mini_cuts_dfs: List[pd.DataFrame],
         transform_metadata: TransformMetadata,
         file_metadata: List[FileMetadata],
-    ) -> None:
+    ) -> Optional[Exception]:
         """\
         [ Internal ] Update the parent `DataHandler` with the loaded data and 
         metadata.
         """
-        try:
-            # Data
-            self._parent._data_table = pd.concat(
-                [self._parent._data_table, *mini_data_dfs], ignore_index=True
+        if not len(mini_data_dfs):
+            logger.warning(
+                "No data was loaded from the provided files! The `DataHandler` "
+                "will not be updated."
             )
+            return None
 
-            # Cuts
+        try:
+            # Note: A file carrying cuts is rejected outright when there is no
+            #       cuts table (see `_post_file_loader_checks`), so cuts never
+            #       end up in the data table.
+            new_cuts_table = self._parent._cuts_table
+
             if self._parent.has_cuts_table:
-                self._parent._cuts_table = pd.concat(
+                new_cuts_table = pd.concat(
                     [self._parent._cuts_table, *mini_cuts_dfs],
                     ignore_index=True,
                 )
-            else:  # ~ if no cuts table, then just add cuts to data table
-                self._parent._data_table = pd.concat(
-                    [self._parent._data_table, *mini_cuts_dfs], axis=1
-                )
-        except Exception as e:
-            # Cache - remove all the files in that we failed to load
-            self._cache = self._cache.difference(cache)
 
-            _error(
-                OscanaError,
+            new_data_table = pd.concat(
+                [self._parent._data_table, *mini_data_dfs], ignore_index=True
+            )
+
+        except Exception as output_error:
+            self._cache.difference_update(cache)
+            _warn(
+                RuntimeWarning,
                 f"An error occurred while updating the `DataHandler` "
-                f"{ERROR_IN_WARN_FORMAT.format(error=e)}!",
+                f"{ERROR_IN_WARN_FORMAT.format(error=output_error)}!",
                 logger=logger,
             )
+            return output_error
+
         else:
-            # Metadata - only do it if there are no errors when joining DFs
+            # ~ only touch the parent once both tables are known to be valid
+            self._parent._data_table = new_data_table
+            self._parent._cuts_table = new_cuts_table
             self._parent._t_metadata = transform_metadata
             self._parent._f_metadata.extend(file_metadata)
+
+        return None
 
     def _load_from_files(
         self,
@@ -471,24 +558,23 @@ class PandasIO(_DataIOStrategy[pd.DataFrame]):
         for name in user_files:
             name = str(name)  # ~ the name should be a string for the cache
 
-            # TODO: Would I also need to compare filenames - i.e., check if I am
-            #       not loading the same file from different directories?
-            #
-            # I am leaving this as an issue for now because it will not impact
-            # my analysis...
-            if name in self._cache:
-                logger.warning(
-                    f"File '{name}' has already been loaded! Skipping..."
-                )
-                continue
-
             try:
                 path = _resolve_file_directory(file=name)
+
+                if str(path) in self._cache:
+                    logger.warning(
+                        f"File '{name}' has already been loaded! Skipping..."
+                    )
+                    continue
 
                 logger.debug(f"Trying to load data from '{name}'...")
                 result = file_loader_func(path, self._parent._variables)
 
-                if not len(self._parent._f_metadata):
+                if not (
+                    len(self._parent._f_metadata)
+                    or len(mini_data_dfs)
+                    or self.get_n_rows_data_table()
+                ):
                     # Only update the transform metadata like this if there are
                     # no file loaded yet.
                     #
@@ -503,6 +589,7 @@ class PandasIO(_DataIOStrategy[pd.DataFrame]):
                     data_vars_proxy=data_vars_proxy,
                     cuts_vars_proxy=cuts_vars_proxy,
                     current_t_metadata=t_metadata_proxy,
+                    has_cuts_table=self._parent.has_cuts_table,
                 )
 
             except Exception as e:
@@ -518,17 +605,31 @@ class PandasIO(_DataIOStrategy[pd.DataFrame]):
             else:
                 self._cache.add(str(path))  # ~ this is important!
                 cache_proxy.add(str(path))
-                mini_data_dfs.append(result["mini_data_df"])
-                mini_cuts_dfs.append(result["mini_cuts_df"])
+
+                # ~ every frame goes in with the same column order, so `concat`
+                #   never has to align them later on
+                mini_data_dfs.append(
+                    _reorder_columns(
+                        df=result["mini_data_df"], columns=data_vars_proxy
+                    )
+                )
+                mini_cuts_dfs.append(
+                    _reorder_columns(
+                        df=result["mini_cuts_df"], columns=cuts_vars_proxy
+                    )
+                )
                 f_metadata_proxy.extend(result["file_metadata"])
 
-        self._update_parent(
+        update_error = self._update_parent(
             cache=cache_proxy,
             mini_data_dfs=mini_data_dfs,
             mini_cuts_dfs=mini_cuts_dfs,
             transform_metadata=t_metadata_proxy,
             file_metadata=f_metadata_proxy,
         )
+
+        if update_error is not None:
+            exceptions_.append(update_error)
 
         if len(exceptions_):
             _warn(
@@ -538,20 +639,21 @@ class PandasIO(_DataIOStrategy[pd.DataFrame]):
                 logger=logger,
             )
 
-    # Overrides
-
+    @override
     def _init_data_table(self) -> pd.DataFrame:
         """\
         [ Internal ] Initialise the data table.
         """
         return pd.DataFrame()
 
+    @override
     def _init_cuts_table(self) -> pd.DataFrame:
         """\
         [ Internal ] Initialise the cuts table.
         """
         return pd.DataFrame()
 
+    @override
     def from_sntp(self, files: List[Union[str, Path]]) -> None:
         """\
         Load data from MINOS SNTP ROOT files.
@@ -566,6 +668,7 @@ class PandasIO(_DataIOStrategy[pd.DataFrame]):
             user_files=files, file_loader_func=_root_file_loader
         )
 
+    @override
     def from_udst(self, files: List[Union[str, Path]]) -> None:
         """\
         Load data from MINOS uDST (micro-DST) ROOT files.
@@ -579,6 +682,7 @@ class PandasIO(_DataIOStrategy[pd.DataFrame]):
             "Loading from uDST files is not yet implemented!"
         )
 
+    @override
     def from_hdf5(self, files: List[Union[str, Path]]) -> None:
         """\
         Load data from HDF5 files.
@@ -592,6 +696,7 @@ class PandasIO(_DataIOStrategy[pd.DataFrame]):
             user_files=files, file_loader_func=_hdf5_file_loader
         )
 
+    @override
     def to_hdf5(
         self,
         out_file: Union[str, Path],
@@ -633,7 +738,7 @@ class PandasIO(_DataIOStrategy[pd.DataFrame]):
         # Check file path...
         out_file = Path(out_file)
 
-        if not (out_file.is_file and (out_file.suffix == ".h5")):
+        if out_file.suffix != ".h5":
             _error(
                 OscanaError,
                 f"The out file '{out_file!s}' is not an HDF5 file! Provide a "
@@ -643,6 +748,13 @@ class PandasIO(_DataIOStrategy[pd.DataFrame]):
 
         if ensure_parent_dir:
             out_file.parent.mkdir(parents=True, exist_ok=True)
+        elif not out_file.parent.is_dir():
+            _error(
+                OscanaError,
+                f"The parent directory '{out_file.parent!s}' does not exist! "
+                "Set `ensure_parent_dir=True` to create it automatically.",
+                logger,
+            )
 
         # Write to HDF5...
         compression_kwargs = _build_compression_kwargs(
@@ -675,12 +787,14 @@ class PandasIO(_DataIOStrategy[pd.DataFrame]):
                 compression_kwargs=compression_kwargs,
             )
 
+    @override
     def get_n_rows_data_table(self) -> int:
         """\
         Get the length of the data table.
         """
         return len(self._parent._data_table)
 
+    @override
     def get_n_rows_cuts_table(self) -> int:
         """\
         Get the length of the cuts table.
@@ -695,12 +809,14 @@ class PandasIO(_DataIOStrategy[pd.DataFrame]):
 
         return 0
 
+    @override
     def get_n_vars_data_table(self) -> int:
         """\
         Get the number of variables in the data table.
         """
         return len(self._parent._data_table.columns)
 
+    @override
     def get_n_vars_cuts_table(self) -> int:
         """\
         Get the number of variables in the cuts table.
@@ -710,12 +826,14 @@ class PandasIO(_DataIOStrategy[pd.DataFrame]):
 
         return 0
 
+    @override
     def get_vars_data_table(self) -> List[str]:
         """\
         Get the list of variable names in the data table.
         """
         return list(self._parent._data_table.columns)
 
+    @override
     def get_vars_cuts_table(self) -> List[str]:
         """\
         Get the list of variable names in the cuts table.
