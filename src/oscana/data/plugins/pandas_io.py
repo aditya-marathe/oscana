@@ -318,23 +318,27 @@ def _fill_h5_metadata_branch(
     group: h5py.Group,
     file_metadata: List[FileMetadata],
     transform_metadata: TransformMetadata,
-    compression_kwargs: Dict[str, Any],
+    variables: List[str],
 ) -> None:
     """\
     [ Internal ] Fill the metadata branch in an HDF5 file.
     """
     group.create_dataset(
+        name="variables",
+        dtype=h5py.string_dtype(encoding="utf-8"),
+        data=json.dumps(list(variables)).encode("utf-8"),
+    )
+
+    group.create_dataset(
         name="transforms",
         dtype=h5py.string_dtype(encoding="utf-8"),
         data=json.dumps(transform_metadata.to_dict()).encode("utf-8"),
-        **compression_kwargs,
     )
 
     group.create_dataset(
         name="files",
         dtype=h5py.string_dtype(encoding="utf-8"),
         data=json.dumps([fm.to_dict() for fm in file_metadata]).encode("utf-8"),
-        **compression_kwargs,
     )
 
 
@@ -344,6 +348,8 @@ def _read_h5_metadata_branch(
     """\
     [ Internal ] Read the metadata branch in an HDF5 file.
     """
+    # We can just skip the "variables" branch here...
+
     t_branch = file["meta/transforms"]
 
     if not isinstance(t_branch, h5py.Dataset):
@@ -795,7 +801,7 @@ class PandasIO(_DataIOStrategy[pd.DataFrame]):
                 group=meta_branch,
                 file_metadata=self._parent._f_metadata,
                 transform_metadata=self._parent._t_metadata,
-                compression_kwargs=compression_kwargs,
+                variables=self._parent._variables,
             )
 
         logger.info(
