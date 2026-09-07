@@ -109,3 +109,6 @@ temp.ipynb
 
 # Log files
 *.log
+
+# Claude
+.claude/
