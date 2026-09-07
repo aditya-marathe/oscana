@@ -23,6 +23,7 @@ pandas = "*"
 uproot = "*"
 scipy = "*"
 h5py = "^3.13.0"
+graphifyy = "^0.9.56"
 
 [tool.poetry.group.test.dependencies]
 pytest = "*"
