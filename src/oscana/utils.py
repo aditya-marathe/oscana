@@ -208,11 +208,12 @@ def _get_dir_from_env(file: str) -> Path:
             _logger,
         )
 
-    # ... if the file does not exist in the '.env' file.
-    _error(
-        OscanaError,
-        f"Reference to file '{file}' does not exist in the '.env' file.",
-        _logger,
+    # I removed the `_error` call here because it get logged shows up even when
+    # I catch it! To be honest, I think even the one above should be a `raise`
+    # rather than this `_error` function. - I am keeping it for now because it
+    # is not causing me any trouble yet.
+    raise OscanaError(
+        f"Reference to file '{file}' does not exist in the '.env' file."
     )
 
 
