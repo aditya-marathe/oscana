@@ -112,3 +112,6 @@ temp.ipynb
 
 # Claude
 .claude/
+
+# Claude - Graphify
+graphify-out/
