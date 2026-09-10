@@ -656,6 +656,25 @@ class PandasIO(_DataIOStrategy[pd.DataFrame]):
                 logger=logger,
             )
 
+    def _get_table(self, from_cuts: bool = False) -> pd.DataFrame:
+        """\
+        [ Internal ] Get the data or cuts table.
+        """
+        if from_cuts:
+            if not self._parent.has_cuts_table:
+                _error(
+                    OscanaError,
+                    "The `DataHandler` has no cuts table! Cannot get "
+                    "the cuts table.",
+                    logger,
+                )
+
+            return self._parent._cuts_table
+
+        return self._parent._data_table
+
+    # Overrides
+
     @override
     def _init_data_table(self) -> pd.DataFrame:
         """\
@@ -808,6 +827,72 @@ class PandasIO(_DataIOStrategy[pd.DataFrame]):
             f"Wrote {self.get_n_rows_data_table()} rows and "
             f"{self.get_n_vars_data_table()} variables to '{out_file!s}'."
         )
+
+    @override
+    def get_column(
+        self,
+        name: str,
+        indices: Optional[npt.NDArray] = None,
+        from_cuts: bool = False,
+    ) -> npt.NDArray:
+        """\
+        Get a variable from the data table.
+
+        Parameters
+        ----------
+        name : str
+            The name of the variable to get.
+
+        indices : Optional[npt.NDArray]
+            The indices of the rows to get. If `None`, all rows are returned.
+
+        from_cuts : bool
+            Whether to get the variable from the cuts table. Defaults to 
+            `False`.
+
+        Returns
+        -------
+        npt.NDArray
+            The variable values.
+        """
+        table = self._get_table(from_cuts=from_cuts)
+        values = table[name].to_numpy()
+
+        return values if indices is None else values[indices]
+
+    @override
+    def get_columns(
+        self,
+        names: List[str],
+        indices: Optional[npt.NDArray] = None,
+        from_cuts: bool = False,
+    ) -> Dict[str, npt.NDArray]:
+        """\
+        Get a dictionary of columns from the data or cuts table.
+
+        Parameters
+        ----------
+        names : List[str]
+            The names of the columns to get.
+
+        indices : Optional[npt.NDArray]
+            The indices of the rows to get. If `None`, all rows are returned.
+
+        from_cuts : bool
+            Whether to get the columns from the cuts table. Defaults to `False`.
+
+        Returns
+        -------
+        Dict[str, npt.NDArray]
+            A dictionary mapping column names to their values.
+        """
+        table = self._get_table(from_cuts=from_cuts)
+        values_dict = {name: table[name].to_numpy() for name in names}
+
+        if indices is None:
+            return values_dict
+
+        return {name: value[indices] for name, value in values_dict.items()}
 
     @override
     def get_n_rows_data_table(self) -> int:
