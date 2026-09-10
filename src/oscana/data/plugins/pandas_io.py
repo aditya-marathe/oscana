@@ -37,6 +37,7 @@ from ..io_base import (
     _DataIOStrategy,
     _SupportedCompressionType,
     _H5DataTypeConverter,
+    _Index,
     H5_DATA_BRANCH_NAME,
     H5_CUTS_BRANCH_NAME,
     H5_META_BRANCH_NAME,
@@ -832,7 +833,7 @@ class PandasIO(_DataIOStrategy[pd.DataFrame]):
     def get_column(
         self,
         name: str,
-        indices: Optional[npt.NDArray] = None,
+        indices: Optional[_Index] = None,
         from_cuts: bool = False,
     ) -> npt.NDArray:
         """\
@@ -843,7 +844,7 @@ class PandasIO(_DataIOStrategy[pd.DataFrame]):
         name : str
             The name of the variable to get.
 
-        indices : Optional[npt.NDArray]
+        indices : Optional[_Index]
             The indices of the rows to get. If `None`, all rows are returned.
 
         from_cuts : bool
@@ -864,7 +865,7 @@ class PandasIO(_DataIOStrategy[pd.DataFrame]):
     def get_columns(
         self,
         names: List[str],
-        indices: Optional[npt.NDArray] = None,
+        indices: Optional[_Index] = None,
         from_cuts: bool = False,
     ) -> Dict[str, npt.NDArray]:
         """\
@@ -875,7 +876,7 @@ class PandasIO(_DataIOStrategy[pd.DataFrame]):
         names : List[str]
             The names of the columns to get.
 
-        indices : Optional[npt.NDArray]
+        indices : Optional[_Index]
             The indices of the rows to get. If `None`, all rows are returned.
 
         from_cuts : bool

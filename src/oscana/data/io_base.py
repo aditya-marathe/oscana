@@ -13,7 +13,7 @@ strategies (loaded from "plugins").
 
 from __future__ import annotations
 
-from typing import List, Dict, Set, Literal, Callable
+from typing import List, Sequence, Dict, Set, Literal, Callable
 from typing import Union, Optional
 from typing import TYPE_CHECKING, TypeAlias, TypeVar, Generic
 
@@ -39,6 +39,8 @@ _SupportedCompressionType: TypeAlias = Literal["gzip", "lzf", None]
 _H5DataTypeConverter: TypeAlias = Callable[[str, str], str]
 # ^ for a given a column name and it's data type, return the data type to use
 #   when writing to HDF5.
+
+_Index: TypeAlias = int | Sequence[int] | npt.NDArray
 
 # ============================== [ Constants  ] ============================== #
 
@@ -158,7 +160,7 @@ class _DataIOStrategy(ABC, Generic[TCov]):
     def get_column(
         self,
         name: str,
-        indices: Optional[npt.NDArray] = None,
+        indices: Optional[_Index] = None,
         from_cuts: bool = False,
     ) -> npt.NDArray:
         """\
@@ -169,7 +171,7 @@ class _DataIOStrategy(ABC, Generic[TCov]):
         name : str
             The name of the column to get.
 
-        indices : Optional[npt.NDArray]
+        indices : Optional[_Index]
             The indices of the rows to get. If `None`, all rows are returned.
 
         from_cuts : bool
@@ -186,7 +188,7 @@ class _DataIOStrategy(ABC, Generic[TCov]):
     def get_columns(
         self,
         names: List[str],
-        indices: Optional[npt.NDArray] = None,
+        indices: Optional[_Index] = None,
         from_cuts: bool = False,
     ) -> Dict[str, npt.NDArray]:
         """\
@@ -197,7 +199,7 @@ class _DataIOStrategy(ABC, Generic[TCov]):
         names : List[str]
             The names of the columns to get.
 
-        indices : Optional[npt.NDArray]
+        indices : Optional[_Index]
             The indices of the rows to get. If `None`, all rows are returned.
 
         from_cuts : bool
