@@ -13,9 +13,11 @@ strategies (loaded from "plugins").
 
 from __future__ import annotations
 
-from typing import List, Set, Literal, Callable
+from typing import List, Dict, Set, Literal, Callable
 from typing import Union, Optional
 from typing import TYPE_CHECKING, TypeAlias, TypeVar, Generic
+
+import numpy.typing as npt
 
 __all__ = []
 
@@ -149,6 +151,62 @@ class _DataIOStrategy(ABC, Generic[TCov]):
         -----
         Compression algorithm "szip" is not supported due to licensing. The out
         file should have the following "branches": "data", "cuts", and "meta".
+        """
+        pass
+
+    @abstractmethod
+    def get_column(
+        self,
+        name: str,
+        indices: Optional[npt.NDArray] = None,
+        from_cuts: bool = False,
+    ) -> npt.NDArray:
+        """\
+        Get a column from the data or cuts table.
+
+        Parameters
+        ----------
+        name : str
+            The name of the column to get.
+
+        indices : Optional[npt.NDArray]
+            The indices of the rows to get. If `None`, all rows are returned.
+
+        from_cuts : bool
+            Whether to get the column from the cuts table. Defaults to `False`.
+
+        Returns
+        -------
+        npt.NDArray
+            The column values.
+        """
+        pass
+
+    @abstractmethod
+    def get_columns(
+        self,
+        names: List[str],
+        indices: Optional[npt.NDArray] = None,
+        from_cuts: bool = False,
+    ) -> Dict[str, npt.NDArray]:
+        """\
+        Get a dictionary of columns from the data or cuts table.
+
+        Parameters
+        ----------
+        names : List[str]
+            The names of the columns to get.
+
+        indices : Optional[npt.NDArray]
+            The indices of the rows to get. If `None`, all rows are returned.
+
+        from_cuts : bool
+            Whether to get the columns from the cuts table. Defaults to `False`.
+
+        Returns
+        -------
+        Dict[str, npt.NDArray]
+            A dictionary mapping column names to their values.
         """
         pass
 
