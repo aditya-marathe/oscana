@@ -830,6 +830,36 @@ class PandasIO(_DataIOStrategy[pd.DataFrame]):
         )
 
     @override
+    def get_indices(self, check: bool = False) -> List[int]:
+        """\
+        Get the indices of the data or cuts table.
+
+        Parameters
+        ----------
+        check : bool
+            Whether to check the validity of the indices. Defaults to `False`.
+
+        Returns
+        -------
+        List[int]
+            The indices of the data or cuts table.
+        """
+        data_table_indices: pd.Index = self._parent._data_table.index
+
+        if check and self._parent.has_cuts_table:
+            cuts_table_indices: pd.Index = self._parent._cuts_table.index
+
+            if not data_table_indices.equals(cuts_table_indices):
+                _error(
+                    OscanaError,
+                    "The indices of the data and cuts tables do not match! "
+                    "This should never happen.",
+                    logger,
+                )
+
+        return data_table_indices.to_list()
+
+    @override
     def get_column(
         self,
         name: str,
