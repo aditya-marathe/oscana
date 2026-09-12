@@ -157,6 +157,23 @@ class _DataIOStrategy(ABC, Generic[TCov]):
         pass
 
     @abstractmethod
+    def get_indices(self, check: bool = False) -> List[int]:
+        """\
+        Get the indices of the data or cuts table.
+
+        Parameters
+        ----------
+        check : bool
+            Whether to check the validity of the indices. Defaults to `False`.
+
+        Returns
+        -------
+        List[int]
+            The indices of the data or cuts table.
+        """
+        pass
+
+    @abstractmethod
     def get_column(
         self,
         name: str,
