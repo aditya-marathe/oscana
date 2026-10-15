@@ -23,6 +23,7 @@ pandas = "*"
 uproot = "*"
 scipy = "*"
 h5py = "*"
+typing-extensions = ">=4.6"
 
 [tool.poetry.group.graphify]
 optional = true
