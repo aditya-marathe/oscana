@@ -22,12 +22,16 @@ matplotlib = "*"
 pandas = "*"
 uproot = "*"
 scipy = "*"
-h5py = "^3.13.0"
-graphifyy = "^0.9.56"
+h5py = "*"
+
+[tool.poetry.group.graphify]
+optional = true
+
+[tool.poetry.group.graphify.dependencies]
+graphifyy = { version = "*" }
 
 [tool.poetry.group.test.dependencies]
 pytest = "*"
-
 
 [tool.poetry.group.dev.dependencies]
 ipykernel = "^6.29.5"
