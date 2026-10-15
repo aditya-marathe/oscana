@@ -28,9 +28,8 @@ from typing import (
     Callable,
     Final,
     ClassVar,
-    Self,
+    Type,
 )
-from typing_extensions import Literal as LiteralExt
 
 import os, platform, json, re
 from importlib import import_module
@@ -48,6 +47,7 @@ from .constants import RESOURCES_PATH
 
 if TYPE_CHECKING:
     from .data.transform import TransformBase
+    from typing_extensions import Self
 
 # =============================== [ Logging  ] =============================== #
 
@@ -60,7 +60,7 @@ minos_numbers: Final[dict[str, Any]] = {}  # Not exactly a constant! :P
 _SUPPORTED_FILE_TYPES: Final[tuple[str, ...]] = ("sntp_std", "sntp_fit")
 
 _DynamicFuncPrefix: TypeAlias = Literal["hlp_", "cut_", "tfm_"]
-_FileType: TypeAlias = LiteralExt["sntp_std", "sntp_fit"]
+_FileType: TypeAlias = Literal["sntp_std", "sntp_fit"]
 
 # ============================== [ Functions  ] ============================== #
 
@@ -383,7 +383,7 @@ class VariableSearchTool:
 
     _instance: ClassVar[VariableSearchTool | None] = None
 
-    def __new__(cls: type[Self]) -> VariableSearchTool:
+    def __new__(cls: Type["Self"]) -> VariableSearchTool:
         """\
         [ Internal ] Borg Pattern for the `VariableSearchTool` class.
         """

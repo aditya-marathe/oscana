@@ -40,7 +40,7 @@ _H5DataTypeConverter: TypeAlias = Callable[[str, str], str]
 # ^ for a given a column name and it's data type, return the data type to use
 #   when writing to HDF5.
 
-_Index: TypeAlias = int | Sequence[int] | npt.NDArray
+_Index: TypeAlias = Union[int, Sequence[int], npt.NDArray]
 
 # ============================== [ Constants  ] ============================== #
 
