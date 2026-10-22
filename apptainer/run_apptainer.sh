@@ -64,15 +64,15 @@ mkdir -p "$RUNS_DIR"
 
 # ================================= [ Build ] ================================ #
 
-# Note: We only rebuild the image if the definition file or any of the source 
-#       files have been changed. It ignores changes to things like __pycache__ 
-#       and other temporary files.
+# Note: The image only holds the dependencies, as the repository is mounted
+#       over `/app` at runtime (so code edits apply without a rebuild). We
+#       only rebuild if the definition file or the dependencies have changed.
 
 cd "$REPO_DIR"
 def_file="apptainer/$PROJECT_NAME.def"
-code=("$def_file" pyproject.toml poetry.lock src res scripts)
-if [[ ! -f "$IMAGE" ]] || [[ -n "$(find "${code[@]}" -newer "$IMAGE" \
-        -not -path "*/__pycache__*" -print -quit)" ]]; then
+deps=("$def_file" pyproject.toml poetry.lock)
+if [[ ! -f "$IMAGE" ]] ||
+    [[ -n "$(find "${deps[@]}" -newer "$IMAGE" -print -quit)" ]]; then
     tmp_image="$APPTAINER_AREA/.build-$$.sif"
     "$APPTAINER" build --force --fakeroot "$tmp_image" "$def_file"
     mv "$tmp_image" "$IMAGE"
@@ -82,8 +82,8 @@ fi
 
 "$APPTAINER" exec \
     --cleanenv \
+    --bind "$REPO_DIR:/app" \
     --bind "$RUNS_DIR:/work" \
-    --bind "$ENV_FILE:/app/.env:ro" \
     --bind "$DATA_DIR:$DATA_DIR:ro" \
     --pwd /work \
     "$IMAGE" \
