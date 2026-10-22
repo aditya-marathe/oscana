@@ -25,6 +25,7 @@ REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="$REPO_DIR/.env"
 DATA_DIR="/unix/nova3/minos"
 RUNS_DIR="$HOME/$PROJECT_NAME-runs"
+USER_DIR="/unix/nova3/users/$USER"
 
 APPTAINER_AREA="/unix/nova3/minos/sing/$USER/$PROJECT_NAME"
 IMAGE="$APPTAINER_AREA/$PROJECT_NAME.sif"
@@ -61,6 +62,7 @@ export SINGULARITY_TMPDIR="$APPTAINER_TMPDIR"
 
 mkdir -p "$APPTAINER_CACHEDIR" "$APPTAINER_TMPDIR"
 mkdir -p "$RUNS_DIR/logs"
+mkdir -p "$USER_DIR"
 
 # ================================= [ Build ] ================================ #
 
@@ -85,6 +87,7 @@ fi
     --bind "$REPO_DIR:/app" \
     --bind "$RUNS_DIR:/work" \
     --bind "$DATA_DIR:$DATA_DIR:ro" \
+    --bind "$USER_DIR:$USER_DIR" \
     --pwd /work \
     "$IMAGE" \
     "${@:-bash}"
