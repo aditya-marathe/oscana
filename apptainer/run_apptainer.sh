@@ -60,7 +60,7 @@ export SINGULARITY_CACHEDIR="$APPTAINER_CACHEDIR"
 export SINGULARITY_TMPDIR="$APPTAINER_TMPDIR"
 
 mkdir -p "$APPTAINER_CACHEDIR" "$APPTAINER_TMPDIR"
-mkdir -p "$RUNS_DIR"
+mkdir -p "$RUNS_DIR/logs"
 
 # ================================= [ Build ] ================================ #
 
